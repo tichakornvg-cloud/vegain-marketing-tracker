@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vegain — Marketing Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+:root {
+  --green:#2d7a4f;--green-l:#4caf6e;--green-bg:#f0faf4;
+  --gray:#6b7280;--gray-l:#f3f4f6;--border:#e5e7eb;
+  --text:#111827;--muted:#6b7280;
+  --red:#ef4444;--orange:#f59e0b;--blue:#3b82f6;--purple:#8b5cf6;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',-apple-system,sans-serif;background:#f8fafc;color:var(--text);font-size:14px}
+
+/* ─── Setup overlay ─── */
+.setup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px}
+.setup-box{background:#fff;border-radius:16px;padding:32px;max-width:600px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.setup-box h2{font-size:18px;font-weight:800;color:var(--green);margin-bottom:6px}
+.setup-box p{font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6}
+.step{background:var(--gray-l);border-radius:10px;padding:14px 16px;margin-bottom:12px;font-size:13px;line-height:1.7}
+.step strong{display:block;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+.step a{color:var(--green);font-weight:600}
+.code-input{background:#1e1e1e;color:#4ade80;padding:14px 16px;border-radius:10px;font-family:monospace;font-size:12px;line-height:1.8;margin:14px 0;position:relative;white-space:pre-wrap;word-break:break-all}
+.code-input .placeholder{color:#f59e0b}
+.config-form{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.config-form input{border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;font-family:monospace}
+.config-form input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(45,122,79,.1)}
+.config-form label{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:2px}
+.config-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:500px){.config-row{grid-template-columns:1fr}}
+
+/* ─── Loading ─── */
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.9);z-index:400;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay p{font-size:13px;color:var(--muted)}
+
+/* ─── Connection badge ─── */
+.conn-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-left:auto}
+.conn-badge .dot-live{width:7px;height:7px;background:#4ade80;border-radius:50%;animation:pulse 2s infinite}
+.conn-badge.offline{background:rgba(239,68,68,.15);color:var(--red)}
+.conn-badge.online{background:rgba(74,222,128,.15);color:#166534}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.header{background:var(--green);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.header h1{font-size:17px;font-weight:700}
+.header .sub{font-size:11px;opacity:.8}
+.logo{width:34px;height:34px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+
+.nav{background:#fff;border-bottom:1px solid var(--border);display:flex;padding:0 24px;gap:4px}
+.nav-btn{padding:13px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s}
+.nav-btn.active{color:var(--green);border-bottom-color:var(--green)}
+
+.container{max-width:1120px;margin:0 auto;padding:20px 24px}
+.section{display:none}.section.active{display:block}
+
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px}
+.kpi{background:#fff;border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.kpi-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.kpi-val{font-size:20px;font-weight:700}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.col-green{color:var(--green)}.col-red{color:var(--red)}.col-orange{color:var(--orange)}
+
+.chart-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+@media(max-width:680px){.chart-row{grid-template-columns:1fr}}
+.chart-card{background:#fff;border-radius:12px;padding:18px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.chart-card h3{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.4px}
+.chart-wrap{position:relative;height:210px}
+
+.card{background:#fff;border-radius:12px;padding:20px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:9px 12px;font-size:11px;font-weight:600;color:var(--muted);border-bottom:2px solid var(--border);background:var(--gray-l);text-transform:uppercase;letter-spacing:.3px}
+.tbl td{padding:10px 12px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#fafaf9}
+.tbl.log tr.rev-row td{background:#f0faf4}
+.tbl.log tr.rev-row:hover td{background:#dcfce7}
+
+.pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;align-items:center}
+.pill{padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;color:var(--text)}
+.pill.sel{background:var(--green);color:#fff;border-color:var(--green)}
+.pill-label{font-size:12px;font-weight:600;color:var(--muted)}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.b-good{background:#dcfce7;color:#166534}.b-warn{background:#fef3c7;color:#92400e}.b-bad{background:#fee2e2;color:#991b1b}
+.b-cost{background:#fee2e2;color:#991b1b}.b-rev{background:#dcfce7;color:#166534}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+.pbar{height:5px;background:var(--gray-l);border-radius:3px;margin-top:4px;overflow:hidden}
+.pfill{height:100%;border-radius:3px;transition:width .5s}
+
+.btn{padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--green);color:#fff}.btn-primary:hover{background:#235f3d}
+.btn-ghost{background:var(--gray-l);color:var(--text)}.btn-ghost:hover{background:#e5e7eb}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-danger{background:#fee2e2;color:var(--red)}.btn-danger:hover{background:#fecaca}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:28px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:20px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group.full{grid-column:1/-1}
+label.fl{font-size:12px;font-weight:600;color:var(--muted)}
+input,select,textarea{border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--text);width:100%;transition:border-color .2s;background:#fff}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(45,122,79,.1)}
+.pfx{position:relative}.pfx span{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.pfx input{padding-left:26px}
+.hint{font-size:11px;color:var(--muted)}
+.modal-btns{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
+
+.toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.2);transform:translateY(80px);opacity:0;transition:all .3s;z-index:300}
+.toast.show{transform:translateY(0);opacity:1}
+
+.type-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
+.type-toggle button{flex:1;padding:9px;border:none;background:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--muted)}
+.type-toggle button.sel-cost{background:#fee2e2;color:var(--red)}
+.type-toggle button.sel-rev{background:#dcfce7;color:#166534}
+
+.log-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.empty{text-align:center;padding:50px 20px;color:var(--muted)}
+.empty .ico{font-size:44px;margin-bottom:10px}
+
+.tip-box{background:var(--green-bg);border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:12px;color:#166534;line-height:1.7}
+.tip-box strong{display:block;font-size:13px;color:var(--green);margin-bottom:4px}
+.cat-pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP OVERLAY ══ -->
+<div class="setup-overlay" id="setup-overlay">
+<div class="setup-box">
+  <h2>🔧 ตั้งค่า Firebase ก่อนใช้งาน</h2>
+  <p>กรอก Firebase config ด้านล่างเพื่อเชื่อมต่อฐานข้อมูลกลาง — ทำครั้งเดียวแล้วทีมใช้ร่วมกันได้เลย</p>
+
+  <div class="step">
+    <strong>1. สร้าง Firebase Project</strong>
+    ไปที่ <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> → "Add project" → ตั้งชื่อ vegain-marketing → ปิด Google Analytics → Create project
+  </div>
+  <div class="step">
+    <strong>2. สร้าง Realtime Database</strong>
+    เมนูซ้าย → "Realtime Database" → "Create database" → เลือก <b>Singapore</b> → Start in <b>test mode</b> → Enable
+  </div>
+  <div class="step">
+    <strong>3. ก็อป Config</strong>
+    Project Settings (⚙️) → "Your apps" → Web app (&lt;/>)  → Register app → ก็อป firebaseConfig แล้วกรอกด้านล่าง
+  </div>
+
+  <div class="config-form" id="config-form">
+    <div class="config-row">
+      <div><label>apiKey</label><input id="cfg-apiKey" placeholder="AIzaSy..."></div>
+      <div><label>projectId</label><input id="cfg-projectId" placeholder="vegain-marketing-..."></div>
+    </div>
+    <div><label>databaseURL <span style="color:var(--red)">*</span></label>
+      <input id="cfg-databaseURL" placeholder="https://vegain-marketing-XXXX-default-rtdb.asia-southeast1.firebasedatabase.app">
+    </div>
+    <div class="config-row">
+      <div><label>authDomain</label><input id="cfg-authDomain" placeholder="vegain-marketing-....firebaseapp.com"></div>
+      <div><label>storageBucket</label><input id="cfg-storageBucket" placeholder="vegain-marketing-....appspot.com"></div>
+    </div>
+    <div class="config-row">
+      <div><label>messagingSenderId</label><input id="cfg-messagingSenderId" placeholder="123456789"></div>
+      <div><label>appId</label><input id="cfg-appId" placeholder="1:123...:web:abc..."></div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px" onclick="saveConfig()">🚀 บันทึกและเชื่อมต่อ</button>
+    <p style="font-size:11px;color:var(--muted);text-align:center">Config จะถูกบันทึกใน browser — ทีมแต่ละคนต้องกรอกครั้งเดียวเท่านั้น</p>
+  </div>
+</div>
+</div>
+
+<!-- ══ LOADING ══ -->
+<div class="loading-overlay" id="loading-overlay" style="display:none">
+  <div class="spinner"></div>
+  <p>กำลังโหลดข้อมูล...</p>
+</div>
+
+<div class="header">
+  <div class="logo">🌿</div>
+  <div><h1>Vegain Marketing Tracker</h1><div class="sub">ข้อมูลกลาง — sync ทุกคนในทีม</div></div>
+  <div id="conn-badge" class="conn-badge offline" style="font-size:11px">⏳ กำลังเชื่อมต่อ...</div>
+  <button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:8px" onclick="openModal()">+ เพิ่มรายการ</button>
+</div>
+
+<nav class="nav">
+  <button class="nav-btn active" onclick="nav('dashboard',this)">📊 Dashboard</button>
+  <button class="nav-btn" onclick="nav('log',this)">📋 Log รายการ</button>
+</nav>
+
+<div class="container">
+
+  <!-- ══ DASHBOARD ══ -->
+  <div id="tab-dashboard" class="section active">
+    <div class="pill-row">
+      <span class="pill-label">เดือน:</span>
+      <div id="month-pills" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div id="dash-empty" class="empty" style="display:none">
+      <div class="ico">📈</div>
+      <p>ยังไม่มีข้อมูล — กด <strong>+ เพิ่มรายการ</strong> เพื่อเริ่ม</p>
+    </div>
+    <div id="dash-content">
+      <div class="kpi-row" id="kpi-row"></div>
+      <div class="chart-row">
+        <div class="chart-card"><h3>สัดส่วนค่าใช้จ่าย Marketing</h3><div class="chart-wrap"><canvas id="cDonut"></canvas></div></div>
+        <div class="chart-card"><h3>แนวโน้ม 6 เดือน</h3><div class="chart-wrap"><canvas id="cBar"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">รายละเอียดแต่ละหมวด</div>
+        <table class="tbl"><thead><tr><th>หมวด</th><th>จำนวน (฿)</th><th>% ของ Marketing</th><th>เป้าหมาย</th></tr></thead>
+        <tbody id="cat-body"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ LOG ══ -->
+  <div id="tab-log" class="section">
+    <div class="log-header">
+      <div style="font-size:16px;font-weight:700">Log รายการทั้งหมด</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="filter-month" onchange="renderLog()" style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border)">
+          <option value="">ทุกเดือน</option>
+        </select>
+        <select id="filter-type" onchange="renderLog()" style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border)">
+          <option value="">ทุกประเภท</option>
+          <option value="cost">ค่าใช้จ่าย</option>
+          <option value="revenue">รายรับ</option>
+        </select>
+        <select id="filter-cat" onchange="renderLog()" style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border)">
+          <option value="">ทุกหมวด</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+        <button class="btn btn-primary btn-sm" onclick="openModal()">+ เพิ่มรายการ</button>
+      </div>
+    </div>
+    <div class="card" style="overflow-x:auto">
+      <div id="log-empty" class="empty" style="display:none"><div class="ico">📂</div><p>ไม่มีรายการ</p></div>
+      <table class="tbl log" id="log-table" style="display:none">
+        <thead><tr><th>วันที่</th><th>ประเภท</th><th>หมวด</th><th>รายละเอียด</th><th>จำนวน (฿)</th><th></th></tr></thead>
+        <tbody id="log-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ MODAL ══ -->
+<div class="overlay" id="overlay">
+<div class="modal" onclick="event.stopPropagation()">
+  <div class="modal-title" id="modal-title">เพิ่มรายการ</div>
+  <div class="type-toggle">
+    <button id="btn-cost" onclick="setType('cost')" class="sel-cost">💸 ค่าใช้จ่าย</button>
+    <button id="btn-rev" onclick="setType('revenue')">💰 รายรับ</button>
+  </div>
+  <div class="form-grid">
+    <div class="form-group">
+      <label class="fl">วันที่</label>
+      <input type="date" id="f-date">
+    </div>
+    <div class="form-group">
+      <label class="fl" id="f-cat-label">หมวดหมู่</label>
+      <select id="f-cat" onchange="updateSubcat()"></select>
+    </div>
+    <div class="form-group full">
+      <label class="fl" id="f-sub-label">ประเภทย่อย</label>
+      <select id="f-sub" onchange="onSubChange()"></select>
+    </div>
+    <!-- Campaign name (Production - Campaign Material) -->
+    <div class="form-group full" id="f-campaign-group" style="display:none">
+      <label class="fl">ชื่อ Campaign <span style="color:var(--red)">*</span></label>
+      <input type="text" id="f-campaign" list="campaign-datalist" placeholder="กรอกชื่อ campaign หรือเลือกจากที่เคยกรอก..." autocomplete="off">
+      <datalist id="campaign-datalist"></datalist>
+      <span class="hint">✏️ พิมพ์ชื่อใหม่ได้เลย — ครั้งต่อไปจะแนะนำให้อัตโนมัติ</span>
+    </div>
+    <!-- Event date range (จาก MKT Event) -->
+    <div class="form-group full" id="f-event-range-group" style="display:none">
+      <label class="fl">ระยะเวลา Event <span style="color:var(--red)">*</span></label>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center">
+        <input type="date" id="f-event-start">
+        <span style="color:var(--muted);font-size:13px;text-align:center">ถึง</span>
+        <input type="date" id="f-event-end">
+      </div>
+      <span class="hint">📅 วันเริ่มต้นและสิ้นสุดของ event</span>
+    </div>
+    <div class="form-group full">
+      <label class="fl">รายละเอียด</label>
+      <input type="text" id="f-desc" placeholder="เช่น รัน Facebook Ads แคมเปญ Summer Sale">
+    </div>
+    <div class="form-group full">
+      <label class="fl">จำนวนเงิน (฿)</label>
+      <div class="pfx"><span>฿</span><input type="number" id="f-amount" placeholder="0" min="0"></div>
+    </div>
+    <div class="form-group full">
+      <label class="fl">Note (ไม่บังคับ)</label>
+      <textarea id="f-note" rows="2" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
+    </div>
+  </div>
+  <div id="f-tip" class="tip-box" style="display:none"></div>
+  <div class="modal-btns">
+    <button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>
+    <button class="btn btn-primary" id="save-btn" onclick="saveEntry()">💾 บันทึก</button>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  FIREBASE CONFIG — embedded (no setup needed)
+// ═══════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyC461cl6yQ0_nTj2Y4nD4QF_n58DwJhaOs",
+  authDomain:        "vegain-marketing.firebaseapp.com",
+  databaseURL:       "https://vegain-marketing-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "vegain-marketing",
+  storageBucket:     "vegain-marketing.firebasestorage.app",
+  messagingSenderId: "658127887904",
+  appId:             "1:658127887904:web:5f6c52a20fe4df6838e645"
+};
+
+// kept for backward compatibility (no-op)
+function saveConfig() {}
+
+// ═══════════════════════════════════════════
+//  CATEGORIES
+// ═══════════════════════════════════════════
+const COST_CATS = {
+  digital:    { label:'📱 Digital Ads',          color:'#2d7a4f', target:'30-40%', tip:'ค่าโฆษณาที่จ่ายให้แพลตฟอร์ม วัดผล ROAS ทุกเดือน', subs:['Facebook Ads','Instagram Ads','Google Ads','Line OA / Line Ads','TikTok Ads','อื่นๆ (Digital)'] },
+  influencer: { label:'🌟 Influencer / KOL',     color:'#4caf6e', target:'15-20%', tip:'ควรแยก cash กับ seeding ให้ชัด seeding ให้คิดราคาทุนสินค้า', subs:['Cash — จ้างรีวิว','Product Seeding (ราคาทุน)','Affiliate Commission','อื่นๆ (Influencer)'] },
+  modern:     { label:'🏪 Modern Trade',          color:'#f59e0b', target:'20-30%', tip:'ค่าที่ต้องจ่ายเพื่อวางสินค้าใน shelf — นับเป็น marketing เต็มๆ', subs:['Listing Fee / ค่าวางสินค้า','Trade Promotion / Co-op','Shelf / Display Fee','อื่นๆ (Modern Trade)'] },
+  production: { label:'🎬 ค่าผลิต (Production)',  color:'#ec4899', target:'10-15%', tip:'ค่าผลิตสิ่งที่ทำเพื่อ marketing เท่านั้น ไม่รวม COGS ปกติ', subs:['Production - MKT Material','Production - Campaign Material','ถ่ายภาพ / วิดีโอ Product','วัสดุ/ของ Seeding','อื่นๆ (Production)'] },
+  content:    { label:'🎨 Content & Creative',    color:'#8b5cf6', target:'10-15%', tip:'รวม photo, design, copywriting, agency — ผลิตครั้งเดียวใช้ได้นาน', subs:['Graphic Design / Copywriting','Agency / Freelance Fee','Social Media Management','อื่นๆ (Content)'] },
+  event:      { label:'🌿 Wellness Bar & Event',  color:'#3b82f6', target:'5-10%',  tip:'ค่าใช้จ่ายหน้าร้านและกิจกรรม สร้าง experience ให้ลูกค้า', subs:['Event / Tasting','In-store Display / ตกแต่ง','ของแถม / ของขวัญลูกค้า','อื่นๆ (Event)'] },
+  pr:         { label:'📣 PR & Other',             color:'#9ca3af', target:'<5%',    tip:'ค่า PR, ของขวัญ media, ค่าสมาชิก platform ที่ไม่ใช่ ads', subs:['PR / Press Release','ของขวัญ Media','ค่าสมาชิก Platform','อื่นๆ'] },
+};
+
+const REV_CATS = {
+  bar:       { label:'🏠 Wellness Bar',    color:'#2d7a4f', subs:['ยอดขายหน้าร้าน','Delivery / Take Away','จาก MKT Event'] },
+  partner:   { label:'🤝 ร้านพาร์ทเนอร์', color:'#4caf6e', subs:['ยอดขายพาร์ทเนอร์','Commission Income','จาก MKT Event'] },
+  modern:    { label:'🏪 Modern Trade',    color:'#f59e0b', subs:['ยอดขาย Modern Trade','จาก MKT Event'] },
+  online:    { label:'💻 Online',          color:'#3b82f6', subs:['Shopee','Lazada','เว็บไซต์ / Line','อื่นๆ (Online)'] },
+  event_rev: { label:'🎪 MKT Event',       color:'#ec4899', subs:['จาก MKT Event'] },
+  other:     { label:'📋 อื่นๆ',           color:'#9ca3af', subs:['อื่นๆ'] },
+};
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let appData = [];        // in-memory cache from Firebase
+let campaignNames = [];  // autocomplete list from Firebase
+let entriesRef, campaignsRef;
+let isConnected = false;
+
+// ═══════════════════════════════════════════
+//  FIREBASE INIT
+// ═══════════════════════════════════════════
+function initFirebase(cfg) {
+  document.getElementById('loading-overlay').style.display = 'flex';
+  try {
+    firebase.initializeApp(cfg);
+    const db = firebase.database();
+    entriesRef  = db.ref('entries');
+    campaignsRef = db.ref('campaigns');
+
+    // Connection state
+    db.ref('.info/connected').on('value', snap => {
+      isConnected = snap.val();
+      const badge = document.getElementById('conn-badge');
+      if (isConnected) {
+        badge.className = 'conn-badge online';
+        badge.innerHTML = '<span class="dot-live"></span> Live';
+      } else {
+        badge.className = 'conn-badge offline';
+        badge.innerHTML = '⚡ Offline';
+      }
+    });
+
+    // Real-time listener — entries
+    entriesRef.on('value', snap => {
+      const val = snap.val() || {};
+      appData = Object.entries(val).map(([id, e]) => ({...e, id}));
+      appData.sort((a,b) => b.date.localeCompare(a.date));
+      document.getElementById('loading-overlay').style.display = 'none';
+      renderDashboard();
+      renderLog();
+    });
+
+    // Real-time listener — campaigns
+    campaignsRef.on('value', snap => {
+      campaignNames = snap.val() || [];
+      refreshCampaignDatalist();
+    });
+
+  } catch(err) {
+    document.getElementById('loading-overlay').style.display = 'none';
+    showToast('❌ Firebase error: ' + err.message, true);
+    console.error(err);
+  }
+}
+
+// ═══════════════════════════════════════════
+//  DATA HELPERS
+// ═══════════════════════════════════════════
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function saveCampaignName(name) {
+  if (!name || !campaignsRef) return;
+  if (campaignNames.includes(name)) return;
+  const newList = [name, ...campaignNames];
+  campaignsRef.set(newList);
+}
+
+function refreshCampaignDatalist() {
+  const dl = document.getElementById('campaign-datalist');
+  if (dl) dl.innerHTML = campaignNames.map(c => `<option value="${c}">`).join('');
+}
+
+// ═══════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════
+function fmt(n) { return Number(n||0).toLocaleString('th-TH'); }
+function monthOf(d) { return d ? d.slice(0,7) : ''; }
+function thMonth(m) {
+  if (!m) return '';
+  const [y,mo] = m.split('-');
+  const n=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return n[parseInt(mo)-1]+' '+(parseInt(y)+543);
+}
+function thDate(d) {
+  if (!d) return '';
+  const [y,m,day] = d.split('-');
+  const n=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return parseInt(day)+' '+n[parseInt(m)-1]+' '+(parseInt(y)+543);
+}
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#ef4444' : '#2d7a4f';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+function catInfo(type, catKey) { return type==='cost' ? COST_CATS[catKey] : REV_CATS[catKey]; }
+
+// ═══════════════════════════════════════════
+//  NAV
+// ═══════════════════════════════════════════
+function nav(tab, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  btn.classList.add('active');
+  if (tab==='dashboard') renderDashboard();
+  if (tab==='log') renderLog();
+}
+
+// ═══════════════════════════════════════════
+//  MODAL
+// ═══════════════════════════════════════════
+let editId = null;
+let currentType = 'cost';
+
+function openModal(id) {
+  editId = id || null;
+  const entry = id ? appData.find(e => e.id===id) : null;
+  document.getElementById('modal-title').textContent = id ? 'แก้ไขรายการ' : 'เพิ่มรายการ';
+  document.getElementById('overlay').classList.add('open');
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('f-date').value       = entry ? entry.date : today;
+  document.getElementById('f-desc').value       = entry ? entry.desc||'' : '';
+  document.getElementById('f-amount').value     = entry ? entry.amount : '';
+  document.getElementById('f-note').value       = entry ? entry.note||'' : '';
+  document.getElementById('f-campaign').value   = entry ? entry.campaign||'' : '';
+  document.getElementById('f-event-start').value = entry ? entry.eventStart||'' : '';
+  document.getElementById('f-event-end').value   = entry ? entry.eventEnd||'' : '';
+  refreshCampaignDatalist();
+  setType(entry ? entry.type : 'cost', entry ? entry.cat : null, entry ? entry.sub : null);
+}
+
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  editId = null;
+}
+
+function setType(type, cat, sub) {
+  currentType = type;
+  document.getElementById('btn-cost').className = type==='cost' ? 'sel-cost' : '';
+  document.getElementById('btn-rev').className  = type==='revenue' ? 'sel-rev' : '';
+  document.getElementById('f-cat-label').textContent = type==='cost' ? 'หมวดหมู่ (ค่าใช้จ่าย)' : 'หมวดหมู่ (รายรับ)';
+  document.getElementById('f-sub-label').textContent = type==='cost' ? 'ประเภทย่อย' : 'ช่องทาง';
+  const cats = type==='cost' ? COST_CATS : REV_CATS;
+  const sel = document.getElementById('f-cat');
+  sel.innerHTML = Object.entries(cats).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('');
+  if (cat) sel.value = cat;
+  updateSubcat(sub);
+}
+
+function updateSubcat(forceSub) {
+  const cats = currentType==='cost' ? COST_CATS : REV_CATS;
+  const catKey = document.getElementById('f-cat').value;
+  const info = cats[catKey];
+  const sel = document.getElementById('f-sub');
+  sel.innerHTML = (info?.subs||[]).map(s => `<option value="${s}">${s}</option>`).join('');
+  if (forceSub) sel.value = forceSub;
+  const tip = document.getElementById('f-tip');
+  if (currentType==='cost' && info?.tip) {
+    tip.style.display='block';
+    tip.innerHTML = `<strong>💡 Tips: ${info.label}</strong>${info.tip}`;
+  } else { tip.style.display='none'; }
+  onSubChange();
+}
+
+function onSubChange() {
+  const sub = document.getElementById('f-sub').value;
+  const isCampaign = sub === 'Production - Campaign Material';
+  const isEvent    = sub === 'จาก MKT Event';
+  document.getElementById('f-campaign-group').style.display = isCampaign ? 'flex' : 'none';
+  document.getElementById('f-event-range-group').style.display = isEvent ? 'block' : 'none';
+  if (isCampaign) { refreshCampaignDatalist(); document.getElementById('f-campaign').focus(); }
+}
+
+// ═══════════════════════════════════════════
+//  SAVE ENTRY (Firebase write)
+// ═══════════════════════════════════════════
+function saveEntry() {
+  if (!entriesRef) { showToast('⚠️ ยังไม่ได้เชื่อมต่อ Firebase', true); return; }
+  const date       = document.getElementById('f-date').value;
+  const cat        = document.getElementById('f-cat').value;
+  const sub        = document.getElementById('f-sub').value;
+  const desc       = document.getElementById('f-desc').value.trim();
+  const amount     = parseFloat(document.getElementById('f-amount').value)||0;
+  const note       = document.getElementById('f-note').value.trim();
+  const campaign   = document.getElementById('f-campaign').value.trim();
+  const eventStart = document.getElementById('f-event-start').value;
+  const eventEnd   = document.getElementById('f-event-end').value;
+
+  if (!date)   { showToast('⚠️ กรุณาเลือกวันที่', true); return; }
+  if (!amount) { showToast('⚠️ กรุณากรอกจำนวนเงิน', true); return; }
+  if (sub==='Production - Campaign Material' && !campaign) { showToast('⚠️ กรุณากรอกชื่อ Campaign', true); return; }
+  if (sub==='จาก MKT Event' && (!eventStart||!eventEnd)) { showToast('⚠️ กรุณาเลือกระยะเวลา Event', true); return; }
+  if (sub==='จาก MKT Event' && eventEnd<eventStart) { showToast('⚠️ วันสิ้นสุดต้องหลังวันเริ่มต้น', true); return; }
+
+  if (campaign) saveCampaignName(campaign);
+
+  const entry = { date, type:currentType, cat, sub, desc, amount, note, campaign, eventStart, eventEnd };
+  const id = editId || uid();
+
+  const btn = document.getElementById('save-btn');
+  btn.textContent = 'กำลังบันทึก...';
+  btn.disabled = true;
+
+  entriesRef.child(id).set(entry)
+    .then(() => {
+      closeModal();
+      const info = catInfo(currentType, cat);
+      showToast('✅ บันทึก ' + (info?.label||'') + ' ฿' + fmt(amount));
+    })
+    .catch(err => { showToast('❌ ' + err.message, true); })
+    .finally(() => { btn.textContent = '💾 บันทึก'; btn.disabled = false; });
+}
+
+// ═══════════════════════════════════════════
+//  DELETE ENTRY
+// ═══════════════════════════════════════════
+function deleteEntry(id) {
+  if (!confirm('ลบรายการนี้?')) return;
+  entriesRef.child(id).remove()
+    .then(() => showToast('🗑 ลบรายการแล้ว'))
+    .catch(err => showToast('❌ ' + err.message, true));
+}
+
+// ═══════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════
+let donutChart=null, barChart=null, selectedMonth='';
+
+function renderDashboard() {
+  const months = [...new Set(appData.map(e => monthOf(e.date)))].filter(Boolean).sort();
+  const pillsEl = document.getElementById('month-pills');
+  pillsEl.innerHTML = '';
+
+  if (!months.length) {
+    document.getElementById('dash-empty').style.display='block';
+    document.getElementById('dash-content').style.display='none';
+    return;
+  }
+  document.getElementById('dash-empty').style.display='none';
+  document.getElementById('dash-content').style.display='block';
+
+  if (!selectedMonth || !months.includes(selectedMonth)) selectedMonth = months[months.length-1];
+
+  months.forEach(m => {
+    const p = document.createElement('button');
+    p.className = 'pill'+(m===selectedMonth?' sel':'');
+    p.textContent = thMonth(m);
+    p.onclick = () => { selectedMonth=m; renderDashboard(); };
+    pillsEl.appendChild(p);
+  });
+
+  const mData  = appData.filter(e => monthOf(e.date)===selectedMonth);
+  const costs  = mData.filter(e => e.type==='cost');
+  const revs   = mData.filter(e => e.type==='revenue');
+  const totalCost = costs.reduce((s,e)=>s+e.amount,0);
+  const totalRev  = revs.reduce((s,e)=>s+e.amount,0);
+  const mktPct = totalRev ? (totalCost/totalRev*100) : 0;
+  const pctClass = mktPct<=20?'col-green':mktPct<=30?'col-orange':'col-red';
+  const pctNote  = mktPct<=20?'✅ อยู่ในเกณฑ์ดี':mktPct<=30?'⚠️ ใกล้เกิน':'🔴 เกินเกณฑ์แนะนำ';
+
+  const catTotals = {};
+  costs.forEach(e => { catTotals[e.cat]=(catTotals[e.cat]||0)+e.amount; });
+  const topCat = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0];
+
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi"><div class="kpi-label">ยอดขายรวม</div><div class="kpi-val col-green">฿${fmt(totalRev)}</div><div class="kpi-sub">${thMonth(selectedMonth)}</div></div>
+    <div class="kpi"><div class="kpi-label">Marketing รวม</div><div class="kpi-val col-red">฿${fmt(totalCost)}</div><div class="kpi-sub">${costs.length} รายการ</div></div>
+    <div class="kpi"><div class="kpi-label">% Marketing / ยอดขาย</div><div class="kpi-val ${pctClass}">${mktPct.toFixed(1)}%</div><div class="kpi-sub">${pctNote}</div></div>
+    <div class="kpi"><div class="kpi-label">หมวดใช้เงินสูงสุด</div><div class="kpi-val" style="font-size:15px">${topCat?(COST_CATS[topCat[0]]?.label||topCat[0]):'—'}</div><div class="kpi-sub">${topCat?'฿'+fmt(topCat[1]):''}</div></div>`;
+
+  const donutData = Object.entries(COST_CATS).map(([k,v])=>({label:v.label,val:catTotals[k]||0,color:v.color})).filter(d=>d.val>0);
+  if (donutChart){donutChart.destroy();donutChart=null;}
+  donutChart = new Chart(document.getElementById('cDonut').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:donutData.map(d=>d.label),datasets:[{data:donutData.map(d=>d.val),backgroundColor:donutData.map(d=>d.color),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+      plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:8}},
+        tooltip:{callbacks:{label:c=>` ฿${fmt(c.raw)} (${totalCost?(c.raw/totalCost*100).toFixed(1):0}%)`}}}}
+  });
+
+  const last6 = months.slice(-6);
+  const barRev = last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='revenue').reduce((s,e)=>s+e.amount,0));
+  const barCost= last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='cost').reduce((s,e)=>s+e.amount,0));
+  if (barChart){barChart.destroy();barChart=null;}
+  barChart = new Chart(document.getElementById('cBar').getContext('2d'),{
+    type:'bar',
+    data:{labels:last6.map(thMonth),datasets:[
+      {label:'ยอดขาย',data:barRev,backgroundColor:'rgba(45,122,79,.15)',borderColor:'#2d7a4f',borderWidth:2,borderRadius:4},
+      {label:'Marketing',data:barCost,backgroundColor:'rgba(239,68,68,.15)',borderColor:'#ef4444',borderWidth:2,borderRadius:4}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10}}},
+      scales:{y:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
+  });
+
+  document.getElementById('cat-body').innerHTML = Object.entries(COST_CATS).map(([k,v])=>{
+    const val=catTotals[k]||0;const p=totalCost?(val/totalCost*100):0;
+    return `<tr><td><span class="dot" style="background:${v.color}"></span>${v.label}</td><td><strong>฿${fmt(val)}</strong></td>
+      <td>${p.toFixed(1)}%<div class="pbar"><div class="pfill" style="width:${p}%;background:${v.color}"></div></div></td>
+      <td><span class="badge b-good" style="background:${v.color}1a;color:${v.color}">${v.target}</span></td></tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════
+function renderLog() {
+  const months = [...new Set(appData.map(e=>monthOf(e.date)))].filter(Boolean).sort().reverse();
+  const fm = document.getElementById('filter-month');
+  const cur = fm.value;
+  fm.innerHTML = '<option value="">ทุกเดือน</option>' + months.map(m=>`<option value="${m}">${thMonth(m)}</option>`).join('');
+  if (cur&&months.includes(cur)) fm.value = cur;
+
+  const fc = document.getElementById('filter-cat');
+  const curc = fc.value;
+  fc.innerHTML = '<option value="">ทุกหมวด</option>' +
+    Object.entries(COST_CATS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('') +
+    Object.entries(REV_CATS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+  if (curc) fc.value = curc;
+
+  const fMonth = document.getElementById('filter-month').value;
+  const fType  = document.getElementById('filter-type').value;
+  const fCat   = document.getElementById('filter-cat').value;
+
+  let rows = [...appData];
+  if (fMonth) rows=rows.filter(e=>monthOf(e.date)===fMonth);
+  if (fType)  rows=rows.filter(e=>e.type===fType);
+  if (fCat)   rows=rows.filter(e=>e.cat===fCat);
+
+  const empty = document.getElementById('log-empty');
+  const table = document.getElementById('log-table');
+  if (!rows.length){empty.style.display='block';table.style.display='none';return;}
+  empty.style.display='none';table.style.display='table';
+
+  document.getElementById('log-body').innerHTML = rows.map(e=>{
+    const info = catInfo(e.type,e.cat);
+    const color = info?.color||'#9ca3af';
+    const isRev = e.type==='revenue';
+    const extraTags = [
+      e.campaign ? `<span style="font-size:11px;background:#fdf4ff;color:#7c3aed;padding:1px 7px;border-radius:10px;font-weight:600">📌 ${e.campaign}</span>` : '',
+      e.eventStart ? `<span style="font-size:11px;background:#fff0f9;color:#be185d;padding:1px 7px;border-radius:10px;font-weight:500">📅 ${thDate(e.eventStart)}${e.eventEnd&&e.eventEnd!==e.eventStart?' – '+thDate(e.eventEnd):''}</span>` : '',
+      e.note ? `<span style="font-size:11px;color:var(--muted)">${e.note}</span>` : '',
+    ].filter(Boolean).join(' ');
+    return `<tr class="${isRev?'rev-row':''}">
+      <td style="white-space:nowrap">${thDate(e.date)}</td>
+      <td><span class="badge ${isRev?'b-rev':'b-cost'}">${isRev?'รายรับ':'ค่าใช้จ่าย'}</span></td>
+      <td><span class="cat-pill" style="background:${color}1a;color:${color}">${info?.label||e.cat}</span><br><span style="font-size:11px;color:var(--muted)">${e.sub||''}</span></td>
+      <td>${e.desc||'—'}${extraTags?'<br>'+extraTags:''}</td>
+      <td style="font-weight:700;color:${isRev?'var(--green)':'var(--red)'}">฿${fmt(e.amount)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="openModal('${e.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteEntry('${e.id}')">🗑</button>
+      </td></tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+//  EXPORT CSV
+// ═══════════════════════════════════════════
+function exportCSV() {
+  if (!appData.length){showToast('⚠️ ไม่มีข้อมูล',true);return;}
+  const rows=[['วันที่','ประเภท','หมวด','หมวดย่อย','Campaign','Event Start','Event End','รายละเอียด','จำนวน (฿)','Note']];
+  appData.forEach(e=>{
+    const info=catInfo(e.type,e.cat);
+    rows.push([e.date,e.type==='cost'?'ค่าใช้จ่าย':'รายรับ',info?.label||e.cat,e.sub||'',(e.campaign||'').replace(/,/g,' '),e.eventStart||'',e.eventEnd||'',(e.desc||'').replace(/,/g,' '),e.amount,(e.note||'').replace(/,/g,' ')]);
+  });
+  const csv='\ufeff'+rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='vegain-marketing-log.csv';a.click();
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+(function(){
+  document.getElementById('overlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
+  // Config is embedded — hide setup overlay and connect immediately
+  document.getElementById('setup-overlay').style.display = 'none';
+  initFirebase(FIREBASE_CONFIG);
+})();
+</script>
+</body>
+</html>
