@@ -132,6 +132,21 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 .tip-box{background:var(--green-bg);border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:12px;color:#166534;line-height:1.7}
 .tip-box strong{display:block;font-size:13px;color:var(--green);margin-bottom:4px}
 .cat-pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+
+/* ─── Campaign cards ─── */
+.camp-card{background:#fff;border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:12px}
+.camp-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.camp-name{font-size:15px;font-weight:700;color:var(--text)}
+.camp-add-btn{padding:5px 14px;border-radius:8px;border:none;background:var(--green);color:#fff;font-size:12px;font-weight:600;cursor:pointer}
+.camp-add-btn:hover{background:#235f3d}
+.camp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.camp-stat{background:var(--gray-l);border-radius:8px;padding:10px 14px}
+.camp-stat-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+.camp-stat-val{font-size:16px;font-weight:700}
+.camp-entries{margin-top:12px;border-top:1px solid var(--border);padding-top:12px;display:none}
+.camp-entries.open{display:block}
+.camp-toggle{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-top:4px}
+.camp-toggle:hover{color:var(--text)}
 </style>
 </head>
 <body>
@@ -152,7 +167,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   </div>
   <div class="step">
     <strong>3. ก็อป Config</strong>
-    Project Settings (⚙️) → "Your apps" → Web app (&lt;/>)  → Register app → ก็อป firebaseConfig แล้วกรอกด้านล่าง
+    Project Settings (⚙️) → "Your apps" → Web app (&lt;/&gt;) → Register app → ก็อป firebaseConfig แล้วกรอกด้านล่าง
   </div>
 
   <div class="config-form" id="config-form">
@@ -193,6 +208,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 <nav class="nav">
   <button class="nav-btn active" onclick="nav('dashboard',this)">📊 Dashboard</button>
   <button class="nav-btn" onclick="nav('log',this)">📋 Log รายการ</button>
+  <button class="nav-btn" onclick="nav('campaign',this)">🎯 แคมเปญ</button>
 </nav>
 
 <div class="container">
@@ -219,6 +235,19 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
         <tbody id="cat-body"></tbody></table>
       </div>
     </div>
+  </div>
+
+  <!-- ══ CAMPAIGN ══ -->
+  <div id="tab-campaign" class="section">
+    <div class="log-header">
+      <div style="font-size:16px;font-weight:700">สรุปแคมเปญ</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">+ เพิ่มรายการ</button>
+    </div>
+    <div id="camp-empty" class="empty" style="display:none">
+      <div class="ico">🎯</div>
+      <p>ยังไม่มีแคมเปญ — ลองกรอกชื่อแคมเปญตอน + เพิ่มรายการ</p>
+    </div>
+    <div id="camp-list"></div>
   </div>
 
   <!-- ══ LOG ══ -->
@@ -273,12 +302,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
       <label class="fl" id="f-sub-label">ประเภทย่อย</label>
       <select id="f-sub" onchange="onSubChange()"></select>
     </div>
-    <!-- Campaign name (Production - Campaign Material) -->
-    <div class="form-group full" id="f-campaign-group" style="display:none">
-      <label class="fl">ชื่อ Campaign <span style="color:var(--red)">*</span></label>
-      <input type="text" id="f-campaign" list="campaign-datalist" placeholder="กรอกชื่อ campaign หรือเลือกจากที่เคยกรอก..." autocomplete="off">
+    <!-- Campaign name (always visible) -->
+    <div class="form-group full" id="f-campaign-group">
+      <label class="fl">แคมเปญ <span style="font-weight:400;color:var(--muted)">(ไม่บังคับ)</span></label>
+      <input type="text" id="f-campaign" list="campaign-datalist" placeholder="เช่น Summer Sale 2026, Shopee 6.6..." autocomplete="off">
       <datalist id="campaign-datalist"></datalist>
-      <span class="hint">✏️ พิมพ์ชื่อใหม่ได้เลย — ครั้งต่อไปจะแนะนำให้อัตโนมัติ</span>
+      <span class="hint">🎯 ระบุชื่อแคมเปญเพื่อดูสรุปรายจ่าย vs รายรับต่อแคมเปญได้ในแท็บ แคมเปญ</span>
     </div>
     <!-- Event date range (จาก MKT Event) -->
     <div class="form-group full" id="f-event-range-group" style="display:none">
@@ -314,9 +343,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 <div class="toast" id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  FIREBASE CONFIG — embedded (no setup needed)
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyC461cl6yQ0_nTj2Y4nD4QF_n58DwJhaOs",
   authDomain:        "vegain-marketing.firebaseapp.com",
@@ -330,14 +359,14 @@ const FIREBASE_CONFIG = {
 // kept for backward compatibility (no-op)
 function saveConfig() {}
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  CATEGORIES
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 const COST_CATS = {
   digital:    { label:'📱 Digital Ads',          color:'#2d7a4f', target:'30-40%', tip:'ค่าโฆษณาที่จ่ายให้แพลตฟอร์ม วัดผล ROAS ทุกเดือน', subs:['Facebook Ads','Instagram Ads','Google Ads','Line OA / Line Ads','TikTok Ads','อื่นๆ (Digital)'] },
   influencer: { label:'🌟 Influencer / KOL',     color:'#4caf6e', target:'15-20%', tip:'ควรแยก cash กับ seeding ให้ชัด seeding ให้คิดราคาทุนสินค้า', subs:['Cash — จ้างรีวิว','Product Seeding (ราคาทุน)','Affiliate Commission','อื่นๆ (Influencer)'] },
   modern:     { label:'🏪 Modern Trade',          color:'#f59e0b', target:'20-30%', tip:'ค่าที่ต้องจ่ายเพื่อวางสินค้าใน shelf — นับเป็น marketing เต็มๆ', subs:['Listing Fee / ค่าวางสินค้า','Trade Promotion / Co-op','Shelf / Display Fee','อื่นๆ (Modern Trade)'] },
-  production: { label:'🎬 ค่าผลิต (Production)',  color:'#ec4899', target:'10-15%', tip:'ค่าผลิตสิ่งที่ทำเพื่อ marketing เท่านั้น ไม่รวม COGS ปกติ', subs:['Production - MKT Material','Production - Campaign Material','ถ่ายภาพ / วิดีโอ Product','วัสดุ/ของ Seeding','อื่นๆ (Production)'] },
+  production: { label:'🏭 ค่าผลิต (Production)',  color:'#ec4899', target:'10-15%', tip:'ค่าผลิตสิ่งที่ทำเพื่อ marketing เท่านั้น ไม่รวม COGS ปกติ', subs:['Production - MKT Material','Production - Campaign Material','ถ่ายภาพ / วิดีโอ Product','วัสดุ/ของ Seeding','อื่นๆ (Production)'] },
   content:    { label:'🎨 Content & Creative',    color:'#8b5cf6', target:'10-15%', tip:'รวม photo, design, copywriting, agency — ผลิตครั้งเดียวใช้ได้นาน', subs:['Graphic Design / Copywriting','Agency / Freelance Fee','Social Media Management','อื่นๆ (Content)'] },
   event:      { label:'🌿 Wellness Bar & Event',  color:'#3b82f6', target:'5-10%',  tip:'ค่าใช้จ่ายหน้าร้านและกิจกรรม สร้าง experience ให้ลูกค้า', subs:['Event / Tasting','In-store Display / ตกแต่ง','ของแถม / ของขวัญลูกค้า','อื่นๆ (Event)'] },
   pr:         { label:'📣 PR & Other',             color:'#9ca3af', target:'<5%',    tip:'ค่า PR, ของขวัญ media, ค่าสมาชิก platform ที่ไม่ใช่ ads', subs:['PR / Press Release','ของขวัญ Media','ค่าสมาชิก Platform','อื่นๆ'] },
@@ -352,17 +381,17 @@ const REV_CATS = {
   other:     { label:'📋 อื่นๆ',           color:'#9ca3af', subs:['อื่นๆ'] },
 };
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  STATE
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 let appData = [];        // in-memory cache from Firebase
 let campaignNames = [];  // autocomplete list from Firebase
 let entriesRef, campaignsRef;
 let isConnected = false;
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  FIREBASE INIT
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function initFirebase(cfg) {
   document.getElementById('loading-overlay').style.display = 'flex';
   try {
@@ -392,6 +421,7 @@ function initFirebase(cfg) {
       document.getElementById('loading-overlay').style.display = 'none';
       renderDashboard();
       renderLog();
+      renderCampaigns();
     });
 
     // Fallback: hide loading overlay after 5s even if onValue is slow
@@ -412,9 +442,9 @@ function initFirebase(cfg) {
   }
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  DATA HELPERS
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
 function saveCampaignName(name) {
@@ -429,9 +459,9 @@ function refreshCampaignDatalist() {
   if (dl) dl.innerHTML = campaignNames.map(c => `<option value="${c}">`).join('');
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  HELPERS
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function fmt(n) { return Number(n||0).toLocaleString('th-TH'); }
 function monthOf(d) { return d ? d.slice(0,7) : ''; }
 function thMonth(m) {
@@ -455,9 +485,9 @@ function showToast(msg, isErr) {
 }
 function catInfo(type, catKey) { return type==='cost' ? COST_CATS[catKey] : REV_CATS[catKey]; }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  NAV
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function nav(tab, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -465,11 +495,12 @@ function nav(tab, btn) {
   btn.classList.add('active');
   if (tab==='dashboard') renderDashboard();
   if (tab==='log') renderLog();
+  if (tab==='campaign') renderCampaigns();
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  MODAL
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 let editId = null;
 let currentType = 'cost';
 
@@ -525,16 +556,14 @@ function updateSubcat(forceSub) {
 
 function onSubChange() {
   const sub = document.getElementById('f-sub').value;
-  const isCampaign = sub === 'Production - Campaign Material';
-  const isEvent    = sub === 'จาก MKT Event';
-  document.getElementById('f-campaign-group').style.display = isCampaign ? 'flex' : 'none';
+  const isEvent = sub === 'จาก MKT Event';
   document.getElementById('f-event-range-group').style.display = isEvent ? 'block' : 'none';
-  if (isCampaign) { refreshCampaignDatalist(); document.getElementById('f-campaign').focus(); }
+  refreshCampaignDatalist();
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  SAVE ENTRY (Firebase write)
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function saveEntry() {
   if (!entriesRef) { showToast('⚠️ ยังไม่ได้เชื่อมต่อ Firebase', true); return; }
   const date       = document.getElementById('f-date').value;
@@ -549,7 +578,6 @@ function saveEntry() {
 
   if (!date)   { showToast('⚠️ กรุณาเลือกวันที่', true); return; }
   if (!amount) { showToast('⚠️ กรุณากรอกจำนวนเงิน', true); return; }
-  if (sub==='Production - Campaign Material' && !campaign) { showToast('⚠️ กรุณากรอกชื่อ Campaign', true); return; }
   if (sub==='จาก MKT Event' && (!eventStart||!eventEnd)) { showToast('⚠️ กรุณาเลือกระยะเวลา Event', true); return; }
   if (sub==='จาก MKT Event' && eventEnd<eventStart) { showToast('⚠️ วันสิ้นสุดต้องหลังวันเริ่มต้น', true); return; }
 
@@ -572,9 +600,9 @@ function saveEntry() {
     .finally(() => { btn.textContent = '💾 บันทึก'; btn.disabled = false; });
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  DELETE ENTRY
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function deleteEntry(id) {
   if (!confirm('ลบรายการนี้?')) return;
   entriesRef.child(id).remove()
@@ -582,9 +610,9 @@ function deleteEntry(id) {
     .catch(err => showToast('❌ ' + err.message, true));
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  DASHBOARD
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 let donutChart=null, barChart=null, selectedMonth='';
 
 function renderDashboard() {
@@ -617,7 +645,7 @@ function renderDashboard() {
   const totalRev  = revs.reduce((s,e)=>s+e.amount,0);
   const mktPct = totalRev ? (totalCost/totalRev*100) : 0;
   const pctClass = mktPct<=20?'col-green':mktPct<=30?'col-orange':'col-red';
-  const pctNote  = mktPct<=20?'✅ อยู่ในเกณฑ์ดี':mktPct<=30?'⚠️ ใกล้เกิน':'🔴 เกินเกณฑ์แนะนำ';
+  const pctNote  = mktPct<=20?'✅ อยู่ในเกณฑ์ดี':mktPct<=30?'⚠️ ใกล้เกินงบ':'🔴 เกินเกณฑ์แนะนำ';
 
   const catTotals = {};
   costs.forEach(e => { catTotals[e.cat]=(catTotals[e.cat]||0)+e.amount; });
@@ -662,9 +690,9 @@ function renderDashboard() {
   }).join('');
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  LOG
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function renderLog() {
   const months = [...new Set(appData.map(e=>monthOf(e.date)))].filter(Boolean).sort().reverse();
   const fm = document.getElementById('filter-month');
@@ -715,9 +743,108 @@ function renderLog() {
   }).join('');
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  EXPORT CSV
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  CAMPAIGNS
+// ═══════════════════════════════════════════════
+function renderCampaigns() {
+  // Gather all entries that have a campaign name
+  const byName = {};
+  appData.forEach(e => {
+    if (!e.campaign) return;
+    if (!byName[e.campaign]) byName[e.campaign] = { costs:[], revenues:[] };
+    if (e.type==='cost')    byName[e.campaign].costs.push(e);
+    if (e.type==='revenue') byName[e.campaign].revenues.push(e);
+  });
+
+  const names = Object.keys(byName).sort();
+  const empty = document.getElementById('camp-empty');
+  const list  = document.getElementById('camp-list');
+
+  if (!names.length) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = names.map(name => {
+    const d = byName[name];
+    const totalCost = d.costs.reduce((s,e)=>s+e.amount,0);
+    const totalRev  = d.revenues.reduce((s,e)=>s+e.amount,0);
+    const net       = totalRev - totalCost;
+    const netColor  = net>=0?'var(--green)':'var(--red)';
+    const roi       = totalCost>0?((net/totalCost)*100).toFixed(1):null;
+    const allEntries = [...d.costs, ...d.revenues].sort((a,b)=>b.date.localeCompare(a.date));
+    const safeId    = name.replace(/[^a-zA-Z0-9]/g,'_');
+
+    const entriesHtml = allEntries.map(e => {
+      const info = catInfo(e.type, e.cat);
+      const isRev = e.type==='revenue';
+      return `<tr class="${isRev?'rev-row':''}">
+        <td style="white-space:nowrap;font-size:12px">${thDate(e.date)}</td>
+        <td><span class="badge ${isRev?'b-rev':'b-cost'}" style="font-size:10px">${isRev?'รายรับ':'รายจ่าย'}</span></td>
+        <td style="font-size:12px">${info?.label||e.cat}</td>
+        <td style="font-size:12px">${e.desc||'—'}</td>
+        <td style="font-weight:700;font-size:13px;color:${isRev?'var(--green)':'var(--red)'}">฿${fmt(e.amount)}</td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="camp-card">
+      <div class="camp-card-header">
+        <div class="camp-name">🎯 ${name}</div>
+        <button class="camp-add-btn" onclick="openModalForCampaign('${name.replace(/'/g,"\\'")}'))">+ เพิ่ม Log</button>
+      </div>
+      <div class="camp-stats">
+        <div class="camp-stat">
+          <div class="camp-stat-label">💸 รายจ่ายรวม</div>
+          <div class="camp-stat-val col-red">฿${fmt(totalCost)}</div>
+        </div>
+        <div class="camp-stat">
+          <div class="camp-stat-label">💰 รายรับรวม</div>
+          <div class="camp-stat-val col-green">฿${fmt(totalRev)}</div>
+        </div>
+        <div class="camp-stat">
+          <div class="camp-stat-label">${net>=0?'🟢 กำไร':'🔴 ขาดทุน'}</div>
+          <div class="camp-stat-val" style="color:${netColor}">฿${fmt(Math.abs(net))}</div>
+        </div>
+        ${roi!==null?`<div class="camp-stat">
+          <div class="camp-stat-label">📈 ROI</div>
+          <div class="camp-stat-val" style="color:${netColor}">${roi}%</div>
+        </div>`:''}
+      </div>
+      ${allEntries.length?`
+      <button class="camp-toggle" onclick="toggleCampEntries('${safeId}')">▶ ดู ${allEntries.length} รายการ</button>
+      <div class="camp-entries" id="camp-ent-${safeId}">
+        <table class="tbl" style="margin-top:8px">
+          <thead><tr><th>วันที่</th><th>ประเภท</th><th>หมวด</th><th>รายละเอียด</th><th>จำนวน (฿)</th></tr></thead>
+          <tbody>${entriesHtml}</tbody>
+        </table>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function toggleCampEntries(safeId) {
+  const el  = document.getElementById('camp-ent-' + safeId);
+  const btn = el.previousElementSibling;
+  const open = el.classList.toggle('open');
+  btn.textContent = (open ? '▼ ซ่อน' : '▶ ดู') + btn.textContent.replace(/^[▼▶] (?:ซ่อน|ดู)/, '');
+  if (open) btn.textContent = '▼ ซ่อนรายการ';
+  else btn.textContent = '▶ ดู ' + el.querySelectorAll('tbody tr').length + ' รายการ';
+}
+
+function openModalForCampaign(campName) {
+  openModal();
+  setTimeout(() => {
+    refreshCampaignDatalist();
+    const el = document.getElementById('f-campaign');
+    if (el) { el.value = campName; }
+  }, 50);
+}
+
 function exportCSV() {
   if (!appData.length){showToast('⚠️ ไม่มีข้อมูล',true);return;}
   const rows=[['วันที่','ประเภท','หมวด','หมวดย่อย','Campaign','Event Start','Event End','รายละเอียด','จำนวน (฿)','Note']];
@@ -725,15 +852,17 @@ function exportCSV() {
     const info=catInfo(e.type,e.cat);
     rows.push([e.date,e.type==='cost'?'ค่าใช้จ่าย':'รายรับ',info?.label||e.cat,e.sub||'',(e.campaign||'').replace(/,/g,' '),e.eventStart||'',e.eventEnd||'',(e.desc||'').replace(/,/g,' '),e.amount,(e.note||'').replace(/,/g,' ')]);
   });
-  const csv='\ufeff'+rows.map(r=>r.join(',')).join('\n');
+  const csv='\uFEFF'+rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download='vegain-marketing-log.csv';a.click();
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  INIT
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  INIT
+// ═════════════════════════════════════════════════
 (function(){
   document.getElementById('overlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
   // Config is embedded — hide setup overlay and connect immediately
