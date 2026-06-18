@@ -147,6 +147,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 .camp-entries.open{display:block}
 .camp-toggle{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-top:4px}
 .camp-toggle:hover{color:var(--text)}
+
+/* ─── Campaign chips (modal) ─── */
+.camp-chip{display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;color:var(--text);gap:4px;white-space:nowrap}
+.camp-chip:hover{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+.camp-chip.active{background:var(--green);color:#fff;border-color:var(--green)}
+.camp-chips-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.camp-chips-label{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px}
+/* ─── New campaign inline form ─── */
+.new-camp-box{background:var(--green-bg);border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;margin-bottom:16px}
 </style>
 </head>
 <body>
@@ -241,11 +250,24 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   <div id="tab-campaign" class="section">
     <div class="log-header">
       <div style="font-size:16px;font-weight:700">สรุปแคมเปญ</div>
-      <button class="btn btn-primary btn-sm" onclick="openModal()">+ เพิ่มรายการ</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="showNewCampForm()">🎯 สร้างแคมเปญ</button>
+        <button class="btn btn-primary btn-sm" onclick="openModal()">+ เพิ่มรายการ</button>
+      </div>
+    </div>
+    <!-- inline new-campaign form -->
+    <div id="new-camp-box" class="new-camp-box" style="display:none">
+      <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:10px">🎯 สร้างแคมเปญใหม่</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="new-camp-input" placeholder="เช่น Shopee 7.7, Summer Sale 2026..." style="flex:1;font-size:13px" onkeydown="if(event.key==='Enter')saveNewCampaign()">
+        <button class="btn btn-primary btn-sm" onclick="saveNewCampaign()">บันทึก</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelNewCampaign()">ยกเลิก</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">เมื่อสร้างแล้ว แคมเปญจะปรากฏเป็นตัวเลือกตอนเพิ่มรายการ</div>
     </div>
     <div id="camp-empty" class="empty" style="display:none">
       <div class="ico">🎯</div>
-      <p>ยังไม่มีแคมเปญ — ลองกรอกชื่อแคมเปญตอน + เพิ่มรายการ</p>
+      <p>ยังไม่มีแคมเปญ — กด <strong>สร้างแคมเปญ</strong> เพื่อเริ่ม</p>
     </div>
     <div id="camp-list"></div>
   </div>
@@ -305,9 +327,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
     <!-- Campaign name (always visible) -->
     <div class="form-group full" id="f-campaign-group">
       <label class="fl">แคมเปญ <span style="font-weight:400;color:var(--muted)">(ไม่บังคับ)</span></label>
-      <input type="text" id="f-campaign" list="campaign-datalist" placeholder="เช่น Summer Sale 2026, Shopee 6.6..." autocomplete="off">
+      <input type="text" id="f-campaign" list="campaign-datalist" placeholder="พิมพ์ชื่อแคมเปญ หรือเลือกจากด้านล่าง..." autocomplete="off" oninput="renderCampaignChips()">
       <datalist id="campaign-datalist"></datalist>
-      <span class="hint">🎯 ระบุชื่อแคมเปญเพื่อดูสรุปรายจ่าย vs รายรับต่อแคมเปญได้ในแท็บ แคมเปญ</span>
+      <div id="camp-chips-modal" class="camp-chips-wrap"></div>
+      <span class="hint">🎯 เลือกแคมเปญเพื่อดูสรุปรายจ่าย vs รายรับในแท็บ แคมเปญ</span>
     </div>
     <!-- Event date range (จาก MKT Event) -->
     <div class="form-group full" id="f-event-range-group" style="display:none">
@@ -442,7 +465,7 @@ function initFirebase(cfg) {
   }
 }
 
-// ═══════════════════════════════════════════════
+// ═════════════════════════════════════════════
 //  DATA HELPERS
 // ═══════════════════════════════════════════════
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -457,6 +480,45 @@ function saveCampaignName(name) {
 function refreshCampaignDatalist() {
   const dl = document.getElementById('campaign-datalist');
   if (dl) dl.innerHTML = campaignNames.map(c => `<option value="${c}">`).join('');
+  renderCampaignChips();
+}
+
+function renderCampaignChips() {
+  const wrap = document.getElementById('camp-chips-modal');
+  if (!wrap) return;
+  if (!campaignNames.length) { wrap.innerHTML = ''; return; }
+  const current = (document.getElementById('f-campaign')||{}).value || '';
+  wrap.innerHTML = '<div class="camp-chips-label">แคมเปญที่มีอยู่ — กดเลือก:</div>' +
+    campaignNames.map(c =>
+      `<button type="button" class="camp-chip${c===current?' active':''}" onclick="selectCampaignChip('${c.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">` + c + `</button>`
+    ).join('');
+}
+
+function selectCampaignChip(name) {
+  const el = document.getElementById('f-campaign');
+  if (!el) return;
+  el.value = (el.value === name) ? '' : name;
+  renderCampaignChips();
+}
+
+function showNewCampForm() {
+  document.getElementById('new-camp-box').style.display = 'block';
+  document.getElementById('new-camp-input').focus();
+}
+
+function cancelNewCampaign() {
+  document.getElementById('new-camp-box').style.display = 'none';
+  document.getElementById('new-camp-input').value = '';
+}
+
+function saveNewCampaign() {
+  const name = document.getElementById('new-camp-input').value.trim();
+  if (!name) { showToast('⚠️ กรุณากรอกชื่อแคมเปญ', true); return; }
+  if (campaignNames.includes(name)) { showToast('⚠️ แคมเปญนี้มีอยู่แล้ว', true); return; }
+  saveCampaignName(name);
+  document.getElementById('new-camp-input').value = '';
+  document.getElementById('new-camp-box').style.display = 'none';
+  showToast('✅ เพิ่มแคมเปญ "' + name + '" แล้ว');
 }
 
 // ═══════════════════════════════════════════════
@@ -518,6 +580,7 @@ function openModal(id) {
   document.getElementById('f-event-start').value = entry ? entry.eventStart||'' : '';
   document.getElementById('f-event-end').value   = entry ? entry.eventEnd||'' : '';
   refreshCampaignDatalist();
+  renderCampaignChips();
   setType(entry ? entry.type : 'cost', entry ? entry.cat : null, entry ? entry.sub : null);
 }
 
@@ -795,7 +858,7 @@ function renderCampaigns() {
     return `<div class="camp-card">
       <div class="camp-card-header">
         <div class="camp-name">🎯 ${name}</div>
-        <button class="camp-add-btn" onclick="openModalForCampaign('${name.replace(/'/g,"\\'")}'))">+ เพิ่ม Log</button>
+        <button class="camp-add-btn" onclick="openModalForCampaign('${name.replace(/'/g,"\\'")}')">+ เพิ่ม Log</button>
       </div>
       <div class="camp-stats">
         <div class="camp-stat">
@@ -852,14 +915,13 @@ function exportCSV() {
     const info=catInfo(e.type,e.cat);
     rows.push([e.date,e.type==='cost'?'ค่าใช้จ่าย':'รายรับ',info?.label||e.cat,e.sub||'',(e.campaign||'').replace(/,/g,' '),e.eventStart||'',e.eventEnd||'',(e.desc||'').replace(/,/g,' '),e.amount,(e.note||'').replace(/,/g,' ')]);
   });
-  const csv='\uFEFF'+rows.map(r=>r.join(',')).join('\n');
+  const csv='﻿'+rows.map(r=>r.join(',')).join('
+');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download='vegain-marketing-log.csv';a.click();
 }
 
-// ═══════════════════════════════════════════════
-//  INIT
 // ═══════════════════════════════════════════════
 //  INIT
 // ═════════════════════════════════════════════════
