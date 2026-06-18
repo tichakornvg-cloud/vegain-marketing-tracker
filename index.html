@@ -161,7 +161,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 <body>
 
 <!-- ══ SETUP OVERLAY ══ -->
-<div class="setup-overlay" id="setup-overlay">
+<div class="setup-overlay" id="setup-overlay" style="display:none">
 <div class="setup-box">
   <h2>🔧 ตั้งค่า Firebase ก่อนใช้งาน</h2>
   <p>กรอก Firebase config ด้านล่างเพื่อเชื่อมต่อฐานข้อมูลกลาง — ทำครั้งเดียวแล้วทีมใช้ร่วมกันได้เลย</p>
@@ -489,9 +489,10 @@ function renderCampaignChips() {
   if (!campaignNames.length) { wrap.innerHTML = ''; return; }
   const current = (document.getElementById('f-campaign')||{}).value || '';
   wrap.innerHTML = '<div class="camp-chips-label">แคมเปญที่มีอยู่ — กดเลือก:</div>' +
-    campaignNames.map(c =>
-      `<button type="button" class="camp-chip${c===current?' active':''}" onclick="selectCampaignChip('${c.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">` + c + `</button>`
-    ).join('');
+    campaignNames.map(function(c) {
+      const safe = c.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return '<button type="button" class="camp-chip' + (c===current?' active':'') + '" onclick="selectCampaignChip(\'' + safe + '\')">' + c + '</button>';
+    }).join('');
 }
 
 function selectCampaignChip(name) {
