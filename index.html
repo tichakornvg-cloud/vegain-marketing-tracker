@@ -172,6 +172,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   </div>
 </div>
 
+<!-- ══ USER (WHO ARE YOU) OVERLAY ══ -->
+<div class="loading-overlay" id="user-overlay" style="display:none;background:rgba(255,255,255,.97)">
+  <div style="text-align:center;max-width:340px;padding:0 20px">
+    <div style="font-size:36px">👤</div>
+    <h2 style="margin:10px 0 4px">คุณคือใคร?</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">เลือกชื่อของคุณ เพื่อบันทึกว่าใครเป็นคนกรอกข้อมูล</p>
+    <select id="user-select" style="width:100%;padding:10px;border-radius:8px;margin-bottom:10px"></select>
+    <input id="user-new" placeholder="หรือพิมพ์ชื่อใหม่..." style="width:100%;padding:10px;border-radius:8px;margin-bottom:12px">
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="confirmUser()">เริ่มใช้งาน</button>
+  </div>
+</div>
+
 <!-- ══ SETUP OVERLAY ══ -->
 <div class="setup-overlay" id="setup-overlay" style="display:none">
 <div class="setup-box">
@@ -224,6 +236,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   <div><h1>Vegain Marketing Tracker</h1><div class="sub">ข้อมูลกลาง — sync ทุกคนในทีม</div></div>
   <div id="conn-badge" class="conn-badge offline" style="font-size:11px">⏳ กำลังเชื่อมต่อ...</div>
   <button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:8px" onclick="openModal()">+ เพิ่มรายการ</button>
+  <button id="current-user" class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:8px" onclick="changeUser()" title="เปลี่ยนผู้ใช้"></button>
   <span id="user-email" style="font-size:11px;color:#fff;opacity:.85;margin-left:8px"></span>
   <button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:4px" onclick="signOut()">ออกจากระบบ</button>
 </div>
@@ -433,7 +446,9 @@ const REV_CATS = {
 // ═══════════════════════════════════════════
 let appData = [];        // in-memory cache from Firebase
 let campaignNames = [];  // autocomplete list from Firebase
-let entriesRef, campaignsRef;
+let entriesRef, campaignsRef, usersRef;
+let userNames = [];
+let currentUser = localStorage.getItem('vg_user') || '';
 let isConnected = false;
 
 // ═══════════════════════════════════════════
@@ -455,6 +470,7 @@ function startApp(cfg) {
       const ue = document.getElementById('user-email');
       if (ue) ue.textContent = user.email;
       if (!dataStarted) { dataStarted = true; initFirebase(); }
+      maybeAskUser();
     } else {
       if (user) {
         // signed in but not allowed
@@ -492,6 +508,13 @@ function initFirebase() {
     const db = firebase.database();
     entriesRef  = db.ref('entries');
     campaignsRef = db.ref('campaigns');
+    usersRef     = db.ref('employees');
+
+    // Real-time listener — employee names
+    usersRef.on('value', snap => {
+      userNames = snap.val() || [];
+      if (document.getElementById('user-overlay').style.display === 'flex') renderUserOptions();
+    });
 
     // Connection state
     db.ref('.info/connected').on('value', snap => {
@@ -539,6 +562,42 @@ function initFirebase() {
 //  DATA HELPERS
 // ═══════════════════════════════════════════
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// ── Employee identification (shared login → declarative identity) ──
+function renderUserOptions() {
+  const sel = document.getElementById('user-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— เลือกชื่อ —</option>' +
+    userNames.map(n => `<option value="${esc(n)}"${n===currentUser?' selected':''}>${esc(n)}</option>`).join('');
+}
+
+function maybeAskUser() {
+  if (currentUser) { showCurrentUser(); }
+  else { renderUserOptions(); document.getElementById('user-overlay').style.display = 'flex'; }
+}
+
+function changeUser() {
+  renderUserOptions();
+  const nw = document.getElementById('user-new'); if (nw) nw.value = '';
+  document.getElementById('user-overlay').style.display = 'flex';
+}
+
+function confirmUser() {
+  const sel = document.getElementById('user-select').value;
+  const nw  = document.getElementById('user-new').value.trim();
+  const name = nw || sel;
+  if (!name) { showToast('⚠️ กรุณาเลือกหรือพิมพ์ชื่อ', true); return; }
+  currentUser = name;
+  localStorage.setItem('vg_user', name);
+  if (!userNames.includes(name) && usersRef) usersRef.set([name, ...userNames]);
+  document.getElementById('user-overlay').style.display = 'none';
+  showCurrentUser();
+}
+
+function showCurrentUser() {
+  const el = document.getElementById('current-user');
+  if (el) el.textContent = '👤 ' + currentUser;
+}
 
 function saveCampaignName(name) {
   if (!name || !campaignsRef) return;
@@ -715,10 +774,19 @@ function saveEntry() {
   if (sub==='จาก MKT Event' && (!eventStart||!eventEnd)) { showToast('⚠️ กรุณาเลือกระยะเวลา Event', true); return; }
   if (sub==='จาก MKT Event' && eventEnd<eventStart) { showToast('⚠️ วันสิ้นสุดต้องหลังวันเริ่มต้น', true); return; }
 
+  if (!currentUser) { changeUser(); showToast('⚠️ กรุณาเลือกชื่อผู้ใช้ก่อน', true); return; }
+
   if (campaign) saveCampaignName(campaign);
 
   const entry = { date, type:currentType, cat, sub, desc, amount, note, campaign, eventStart, eventEnd };
   const id = editId || uid();
+  if (editId) {
+    const orig = appData.find(e => e.id === editId);
+    entry.createdBy = (orig && orig.createdBy) || currentUser;
+    entry.updatedBy = currentUser;
+  } else {
+    entry.createdBy = currentUser;
+  }
 
   const btn = document.getElementById('save-btn');
   btn.textContent = 'กำลังบันทึก...';
@@ -863,6 +931,7 @@ function renderLog() {
       e.campaign ? `<span style="font-size:11px;background:#fdf4ff;color:#7c3aed;padding:1px 7px;border-radius:10px;font-weight:600">📌 ${esc(e.campaign)}</span>` : '',
       e.eventStart ? `<span style="font-size:11px;background:#fff0f9;color:#be185d;padding:1px 7px;border-radius:10px;font-weight:500">📅 ${thDate(e.eventStart)}${e.eventEnd&&e.eventEnd!==e.eventStart?' – '+thDate(e.eventEnd):''}</span>` : '',
       e.note ? `<span style="font-size:11px;color:var(--muted)">${esc(e.note)}</span>` : '',
+      e.createdBy ? `<span style="font-size:11px;background:#eef2ff;color:#4338ca;padding:1px 7px;border-radius:10px;font-weight:600">👤 ${esc(e.createdBy)}</span>` : '',
     ].filter(Boolean).join(' ');
     return `<tr class="${isRev?'rev-row':''}">
       <td style="white-space:nowrap">${thDate(e.date)}</td>
@@ -981,10 +1050,10 @@ function openModalForCampaign(campName) {
 
 function exportCSV() {
   if (!appData.length){showToast('⚠️ ไม่มีข้อมูล',true);return;}
-  const rows=[['วันที่','ประเภท','หมวด','หมวดย่อย','Campaign','Event Start','Event End','รายละเอียด','จำนวน (฿)','Note']];
+  const rows=[['วันที่','ประเภท','หมวด','หมวดย่อย','Campaign','Event Start','Event End','รายละเอียด','จำนวน (฿)','Note','ผู้บันทึก']];
   appData.forEach(e=>{
     const info=catInfo(e.type,e.cat);
-    rows.push([e.date,e.type==='cost'?'ค่าใช้จ่าย':'รายรับ',info?.label||e.cat,e.sub||'',(e.campaign||'').replace(/,/g,' '),e.eventStart||'',e.eventEnd||'',(e.desc||'').replace(/,/g,' '),e.amount,(e.note||'').replace(/,/g,' ')]);
+    rows.push([e.date,e.type==='cost'?'ค่าใช้จ่าย':'รายรับ',info?.label||e.cat,e.sub||'',(e.campaign||'').replace(/,/g,' '),e.eventStart||'',e.eventEnd||'',(e.desc||'').replace(/,/g,' '),e.amount,(e.note||'').replace(/,/g,' '),(e.createdBy||'').replace(/,/g,' ')]);
   });
   const csv='﻿'+rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');
