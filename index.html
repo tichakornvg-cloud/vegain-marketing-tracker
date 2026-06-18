@@ -366,9 +366,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 <div class="toast" id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  FIREBASE CONFIG — embedded (no setup needed)
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyC461cl6yQ0_nTj2Y4nD4QF_n58DwJhaOs",
   authDomain:        "vegain-marketing.firebaseapp.com",
@@ -382,9 +382,9 @@ const FIREBASE_CONFIG = {
 // kept for backward compatibility (no-op)
 function saveConfig() {}
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  CATEGORIES
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 const COST_CATS = {
   digital:    { label:'📱 Digital Ads',          color:'#2d7a4f', target:'30-40%', tip:'ค่าโฆษณาที่จ่ายให้แพลตฟอร์ม วัดผล ROAS ทุกเดือน', subs:['Facebook Ads','Instagram Ads','Google Ads','Line OA / Line Ads','TikTok Ads','อื่นๆ (Digital)'] },
   influencer: { label:'🌟 Influencer / KOL',     color:'#4caf6e', target:'15-20%', tip:'ควรแยก cash กับ seeding ให้ชัด seeding ให้คิดราคาทุนสินค้า', subs:['Cash — จ้างรีวิว','Product Seeding (ราคาทุน)','Affiliate Commission','อื่นๆ (Influencer)'] },
@@ -404,17 +404,17 @@ const REV_CATS = {
   other:     { label:'📋 อื่นๆ',           color:'#9ca3af', subs:['อื่นๆ'] },
 };
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  STATE
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 let appData = [];        // in-memory cache from Firebase
 let campaignNames = [];  // autocomplete list from Firebase
 let entriesRef, campaignsRef;
 let isConnected = false;
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  FIREBASE INIT
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function initFirebase(cfg) {
   document.getElementById('loading-overlay').style.display = 'flex';
   try {
@@ -465,9 +465,9 @@ function initFirebase(cfg) {
   }
 }
 
-// ═════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  DATA HELPERS
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
 function saveCampaignName(name) {
@@ -498,7 +498,7 @@ function renderCampaignChips() {
 function selectCampaignChip(name) {
   const el = document.getElementById('f-campaign');
   if (!el) return;
-  el.value = (el.value === name) ? '' : name;
+  el.value = (el.value === name) ? '' : name;  // toggle: click again to deselect
   renderCampaignChips();
 }
 
@@ -522,9 +522,9 @@ function saveNewCampaign() {
   showToast('✅ เพิ่มแคมเปญ "' + name + '" แล้ว');
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  HELPERS
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function fmt(n) { return Number(n||0).toLocaleString('th-TH'); }
 function monthOf(d) { return d ? d.slice(0,7) : ''; }
 function thMonth(m) {
@@ -548,9 +548,9 @@ function showToast(msg, isErr) {
 }
 function catInfo(type, catKey) { return type==='cost' ? COST_CATS[catKey] : REV_CATS[catKey]; }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  NAV
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function nav(tab, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -561,9 +561,9 @@ function nav(tab, btn) {
   if (tab==='campaign') renderCampaigns();
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  MODAL
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 let editId = null;
 let currentType = 'cost';
 
@@ -625,9 +625,9 @@ function onSubChange() {
   refreshCampaignDatalist();
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  SAVE ENTRY (Firebase write)
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function saveEntry() {
   if (!entriesRef) { showToast('⚠️ ยังไม่ได้เชื่อมต่อ Firebase', true); return; }
   const date       = document.getElementById('f-date').value;
@@ -664,9 +664,9 @@ function saveEntry() {
     .finally(() => { btn.textContent = '💾 บันทึก'; btn.disabled = false; });
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  DELETE ENTRY
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function deleteEntry(id) {
   if (!confirm('ลบรายการนี้?')) return;
   entriesRef.child(id).remove()
@@ -674,9 +674,9 @@ function deleteEntry(id) {
     .catch(err => showToast('❌ ' + err.message, true));
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  DASHBOARD
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 let donutChart=null, barChart=null, selectedMonth='';
 
 function renderDashboard() {
@@ -754,9 +754,9 @@ function renderDashboard() {
   }).join('');
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  LOG
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function renderLog() {
   const months = [...new Set(appData.map(e=>monthOf(e.date)))].filter(Boolean).sort().reverse();
   const fm = document.getElementById('filter-month');
@@ -807,12 +807,12 @@ function renderLog() {
   }).join('');
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  EXPORT CSV
-// ═══════════════════════════════════════════════
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  CAMPAIGNS
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function renderCampaigns() {
   // Gather all entries that have a campaign name
   const byName = {};
@@ -916,16 +916,15 @@ function exportCSV() {
     const info=catInfo(e.type,e.cat);
     rows.push([e.date,e.type==='cost'?'ค่าใช้จ่าย':'รายรับ',info?.label||e.cat,e.sub||'',(e.campaign||'').replace(/,/g,' '),e.eventStart||'',e.eventEnd||'',(e.desc||'').replace(/,/g,' '),e.amount,(e.note||'').replace(/,/g,' ')]);
   });
-  const csv='﻿'+rows.map(r=>r.join(',')).join('
-');
+  const csv='﻿'+rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download='vegain-marketing-log.csv';a.click();
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════
 //  INIT
-// ═════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 (function(){
   document.getElementById('overlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
   // Config is embedded — hide setup overlay and connect immediately
