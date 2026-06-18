@@ -388,11 +388,16 @@ function initFirebase(cfg) {
     entriesRef.on('value', snap => {
       const val = snap.val() || {};
       appData = Object.entries(val).map(([id, e]) => ({...e, id}));
-      appData.sort((a,b) => b.date.localeCompare(a.date));
+      appData.sort((a,b) => (b.date||'').localeCompare(a.date||''));
       document.getElementById('loading-overlay').style.display = 'none';
       renderDashboard();
       renderLog();
     });
+
+    // Fallback: hide loading overlay after 5s even if onValue is slow
+    setTimeout(() => {
+      document.getElementById('loading-overlay').style.display = 'none';
+    }, 5000);
 
     // Real-time listener — campaigns
     campaignsRef.on('value', snap => {
