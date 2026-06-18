@@ -8,6 +8,7 @@
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <style>
 :root {
   --green:#2d7a4f;--green-l:#4caf6e;--green-bg:#f0faf4;
@@ -160,6 +161,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 </head>
 <body>
 
+<!-- ══ LOGIN OVERLAY ══ -->
+<div class="loading-overlay" id="login-overlay" style="display:none;background:rgba(255,255,255,.97)">
+  <div style="text-align:center;max-width:340px;padding:0 20px">
+    <div style="font-size:40px">🌿</div>
+    <h2 style="margin:10px 0 4px">Vegain — Marketing Tracker</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:22px">เข้าสู่ระบบด้วยบัญชี Google ของ <strong>@vegain-th.com</strong> เพื่อใช้งาน</p>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="signIn()">🔐 เข้าสู่ระบบด้วย Google</button>
+    <p id="login-err" style="display:none;color:var(--red);font-size:12px;margin-top:14px"></p>
+  </div>
+</div>
+
 <!-- ══ SETUP OVERLAY ══ -->
 <div class="setup-overlay" id="setup-overlay" style="display:none">
 <div class="setup-box">
@@ -212,6 +224,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   <div><h1>Vegain Marketing Tracker</h1><div class="sub">ข้อมูลกลาง — sync ทุกคนในทีม</div></div>
   <div id="conn-badge" class="conn-badge offline" style="font-size:11px">⏳ กำลังเชื่อมต่อ...</div>
   <button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:8px" onclick="openModal()">+ เพิ่มรายการ</button>
+  <span id="user-email" style="font-size:11px;color:#fff;opacity:.85;margin-left:8px"></span>
+  <button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:4px" onclick="signOut()">ออกจากระบบ</button>
 </div>
 
 <nav class="nav">
@@ -379,8 +393,18 @@ const FIREBASE_CONFIG = {
   appId:             "1:658127887904:web:5f6c52a20fe4df6838e645"
 };
 
+// Only Google accounts on this domain may access the data
+const ALLOWED_EMAIL_DOMAIN = "vegain-th.com";
+
 // kept for backward compatibility (no-op)
 function saveConfig() {}
+
+// Escape user-controlled strings before injecting into innerHTML (prevents stored XSS)
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 // ═══════════════════════════════════════════
 //  CATEGORIES
@@ -415,10 +439,56 @@ let isConnected = false;
 // ═══════════════════════════════════════════
 //  FIREBASE INIT
 // ═══════════════════════════════════════════
-function initFirebase(cfg) {
+let authInst = null;
+let dataStarted = false;
+
+function startApp(cfg) {
+  firebase.initializeApp(cfg);
+  authInst = firebase.auth();
+
+  // React to login / logout
+  authInst.onAuthStateChanged(user => {
+    const ok = user && user.emailVerified &&
+               (user.email || '').toLowerCase().endsWith('@' + ALLOWED_EMAIL_DOMAIN);
+    if (ok) {
+      document.getElementById('login-overlay').style.display = 'none';
+      const ue = document.getElementById('user-email');
+      if (ue) ue.textContent = user.email;
+      if (!dataStarted) { dataStarted = true; initFirebase(); }
+    } else {
+      if (user) {
+        // signed in but not allowed
+        showLoginError('บัญชีนี้ไม่ได้รับอนุญาต — ต้องเป็นอีเมล @' + ALLOWED_EMAIL_DOMAIN);
+        authInst.signOut();
+      }
+      document.getElementById('login-overlay').style.display = 'flex';
+    }
+  });
+}
+
+function signIn() {
+  showLoginError('');
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ hd: ALLOWED_EMAIL_DOMAIN });
+  authInst.signInWithPopup(provider).catch(err => {
+    showLoginError('เข้าสู่ระบบไม่สำเร็จ: ' + err.message);
+  });
+}
+
+function signOut() {
+  if (authInst) authInst.signOut();
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-err');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function initFirebase() {
   document.getElementById('loading-overlay').style.display = 'flex';
   try {
-    firebase.initializeApp(cfg);
     const db = firebase.database();
     entriesRef  = db.ref('entries');
     campaignsRef = db.ref('campaigns');
@@ -479,7 +549,7 @@ function saveCampaignName(name) {
 
 function refreshCampaignDatalist() {
   const dl = document.getElementById('campaign-datalist');
-  if (dl) dl.innerHTML = campaignNames.map(c => `<option value="${c}">`).join('');
+  if (dl) dl.innerHTML = campaignNames.map(c => `<option value="${esc(c)}">`).join('');
   renderCampaignChips();
 }
 
@@ -491,7 +561,7 @@ function renderCampaignChips() {
   wrap.innerHTML = '<div class="camp-chips-label">แคมเปญที่มีอยู่ — กดเลือก:</div>' +
     campaignNames.map(function(c) {
       const safe = c.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      return '<button type="button" class="camp-chip' + (c===current?' active':'') + '" onclick="selectCampaignChip(\'' + safe + '\')">' + c + '</button>';
+      return '<button type="button" class="camp-chip' + (c===current?' active':'') + '" onclick="selectCampaignChip(\'' + esc(safe) + '\')">' + esc(c) + '</button>';
     }).join('');
 }
 
@@ -790,15 +860,15 @@ function renderLog() {
     const color = info?.color||'#9ca3af';
     const isRev = e.type==='revenue';
     const extraTags = [
-      e.campaign ? `<span style="font-size:11px;background:#fdf4ff;color:#7c3aed;padding:1px 7px;border-radius:10px;font-weight:600">📌 ${e.campaign}</span>` : '',
+      e.campaign ? `<span style="font-size:11px;background:#fdf4ff;color:#7c3aed;padding:1px 7px;border-radius:10px;font-weight:600">📌 ${esc(e.campaign)}</span>` : '',
       e.eventStart ? `<span style="font-size:11px;background:#fff0f9;color:#be185d;padding:1px 7px;border-radius:10px;font-weight:500">📅 ${thDate(e.eventStart)}${e.eventEnd&&e.eventEnd!==e.eventStart?' – '+thDate(e.eventEnd):''}</span>` : '',
-      e.note ? `<span style="font-size:11px;color:var(--muted)">${e.note}</span>` : '',
+      e.note ? `<span style="font-size:11px;color:var(--muted)">${esc(e.note)}</span>` : '',
     ].filter(Boolean).join(' ');
     return `<tr class="${isRev?'rev-row':''}">
       <td style="white-space:nowrap">${thDate(e.date)}</td>
       <td><span class="badge ${isRev?'b-rev':'b-cost'}">${isRev?'รายรับ':'ค่าใช้จ่าย'}</span></td>
-      <td><span class="cat-pill" style="background:${color}1a;color:${color}">${info?.label||e.cat}</span><br><span style="font-size:11px;color:var(--muted)">${e.sub||''}</span></td>
-      <td>${e.desc||'—'}${extraTags?'<br>'+extraTags:''}</td>
+      <td><span class="cat-pill" style="background:${color}1a;color:${color}">${info?.label||esc(e.cat)}</span><br><span style="font-size:11px;color:var(--muted)">${esc(e.sub||'')}</span></td>
+      <td>${esc(e.desc||'—')}${extraTags?'<br>'+extraTags:''}</td>
       <td style="font-weight:700;color:${isRev?'var(--green)':'var(--red)'}">฿${fmt(e.amount)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="openModal('${e.id}')">✏️</button>
@@ -850,16 +920,16 @@ function renderCampaigns() {
       return `<tr class="${isRev?'rev-row':''}">
         <td style="white-space:nowrap;font-size:12px">${thDate(e.date)}</td>
         <td><span class="badge ${isRev?'b-rev':'b-cost'}" style="font-size:10px">${isRev?'รายรับ':'รายจ่าย'}</span></td>
-        <td style="font-size:12px">${info?.label||e.cat}</td>
-        <td style="font-size:12px">${e.desc||'—'}</td>
+        <td style="font-size:12px">${info?.label||esc(e.cat)}</td>
+        <td style="font-size:12px">${esc(e.desc||'—')}</td>
         <td style="font-weight:700;font-size:13px;color:${isRev?'var(--green)':'var(--red)'}">฿${fmt(e.amount)}</td>
       </tr>`;
     }).join('');
 
     return `<div class="camp-card">
       <div class="camp-card-header">
-        <div class="camp-name">🎯 ${name}</div>
-        <button class="camp-add-btn" onclick="openModalForCampaign('${name.replace(/'/g,"\\'")}')">+ เพิ่ม Log</button>
+        <div class="camp-name">🎯 ${esc(name)}</div>
+        <button class="camp-add-btn" onclick="openModalForCampaign('${esc(name.replace(/'/g,"\\'"))}')">+ เพิ่ม Log</button>
       </div>
       <div class="camp-stats">
         <div class="camp-stat">
@@ -929,7 +999,7 @@ function exportCSV() {
   document.getElementById('overlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
   // Config is embedded — hide setup overlay and connect immediately
   document.getElementById('setup-overlay').style.display = 'none';
-  initFirebase(FIREBASE_CONFIG);
+  startApp(FIREBASE_CONFIG);
 })();
 </script>
 </body>

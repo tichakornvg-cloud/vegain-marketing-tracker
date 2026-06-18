@@ -1,0 +1,6 @@
+{
+  "rules": {
+    ".read": "auth != null && auth.token.email_verified == true && auth.token.email.matches(/.*@vegain-th[.]com$/)",
+    ".write": "auth != null && auth.token.email_verified == true && auth.token.email.matches(/.*@vegain-th[.]com$/)"
+  }
+}
