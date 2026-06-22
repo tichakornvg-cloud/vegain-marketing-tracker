@@ -9,6 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
   --green:#2d7a4f;--green-l:#4caf6e;--green-bg:#f0faf4;
@@ -412,6 +413,27 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   <div class="modal-btns">
     <button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button>
     <button class="btn btn-primary" id="save-btn" onclick="saveEntry()">💾 บันทึก</button>
+  </div>
+</div>
+</div>
+
+<!-- ══ IMPORT MODAL ══ -->
+<div class="overlay" id="import-overlay">
+<div class="modal" onclick="event.stopPropagation()" style="max-width:760px">
+  <div class="modal-title">📥 นำเข้าจาก Excel / Sheet</div>
+  <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px">
+    รองรับไฟล์ <strong>.xlsx / .xls / .csv</strong> รูปแบบรายงานสรุปรายเดือนของวีเกน (8 หมวดต้นทุน + รายรับแยกช่องทาง).<br>
+    ถ้าไฟล์เป็น <strong>.numbers</strong> ให้เปิดใน Numbers แล้ว <em>File → Export To → Excel</em> ก่อน แล้วค่อยเลือกไฟล์ที่นี่
+  </div>
+  <input type="file" id="import-file" accept=".xlsx,.xls,.csv" onchange="handleImportFile(event)" style="margin-bottom:12px">
+  <div id="import-status" style="font-size:13px;margin-bottom:10px"></div>
+  <div id="import-preview" style="max-height:340px;overflow:auto;display:none">
+    <table class="tbl" style="font-size:12px"><thead><tr><th>วันที่</th><th>ประเภท</th><th>กลุ่ม/ช่องทาง</th><th>สาขา</th><th>ผู้รับ</th><th>จำนวน</th></tr></thead>
+    <tbody id="import-preview-body"></tbody></table>
+  </div>
+  <div class="modal-btns">
+    <button class="btn btn-ghost" onclick="closeImport()">ยกเลิก</button>
+    <button class="btn btn-primary" id="import-confirm-btn" onclick="confirmImport()" style="display:none">💾 นำเข้าทั้งหมด</button>
   </div>
 </div>
 </div>
@@ -1196,6 +1218,125 @@ function exportCSV() {
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download='vegain-marketing-log.csv';a.click();
+}
+
+
+// ═══════════════════════════════════════════
+//  IMPORT FROM EXCEL / SHEET
+// ═══════════════════════════════════════════
+let importedRows = [];
+const GROUP_BY_NUM = {1:'marketing',2:'payroll',3:'material',4:'packaging',5:'shipping',6:'tax',7:'rent',8:'other'};
+
+function openImport() {
+  document.getElementById('import-file').value='';
+  document.getElementById('import-status').textContent='';
+  document.getElementById('import-preview').style.display='none';
+  document.getElementById('import-preview-body').innerHTML='';
+  document.getElementById('import-confirm-btn').style.display='none';
+  importedRows=[];
+  document.getElementById('import-overlay').classList.add('open');
+}
+function closeImport() { document.getElementById('import-overlay').classList.remove('open'); }
+
+function impNum(v){ if(v==null)return 0; if(typeof v==='number')return v; const n=parseFloat(String(v).replace(/[, ]/g,'')); return isNaN(n)?0:n; }
+function impTxt(v){ return v==null?'':String(v).trim(); }
+function impDate(v){
+  if(v==null)return '';
+  if(v instanceof Date && !isNaN(v)) return new Date(v.getTime()-v.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const s=String(v).trim();
+  let m=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(m){ const y=+m[1]; if(y>2100)return ''; return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`; }
+  m=s.match(/(\d{1,2})\/(\d{1,3})\/(\d{2,4})/);
+  if(m){ let d=m[1].padStart(2,'0'); let mo=(m[2].replace(/^0+/,'')||'0').padStart(2,'0'); let y=m[3]; if(y.length<=2)y='20'+y.padStart(2,'0'); if(y.length===3)y='2'+y.slice(-3); if(parseInt(mo)>12||parseInt(y)>2100)return ''; return `${y}-${mo}-${d}`; }
+  return '';
+}
+function impChannel(s){
+  s=impTxt(s); if(!s)return '';
+  const hit=REV_CHANNELS.find(c=>s.toLowerCase().includes(c.toLowerCase())||c.toLowerCase().includes(s.toLowerCase()));
+  return hit||'อื่นๆ';
+}
+
+function handleImportFile(ev){
+  const file=ev.target.files[0]; if(!file)return;
+  const status=document.getElementById('import-status');
+  if(typeof XLSX==='undefined'){ status.textContent='❌ โหลดไลบรารีอ่าน Excel ไม่สำเร็จ (ตรวจอินเทอร์เน็ต)'; return; }
+  status.textContent='⏳ กำลังอ่านไฟล์...';
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+      importedRows=parseReport(grid);
+      renderImportPreview();
+    }catch(err){ status.textContent='❌ อ่านไฟล์ไม่สำเร็จ: '+err.message; }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseReport(grid){
+  const out=[]; let curGroup=null; let inRevenue=false; const monthsCount={};
+  for(let r=0;r<grid.length;r++){
+    const row=grid[r]||[];
+    const a=impTxt(row[0]);
+    const gm=a.match(/หมวด\s*(\d)/);
+    if(gm){ curGroup=GROUP_BY_NUM[parseInt(gm[1])]||'other'; inRevenue=false; continue; }
+    if(impTxt(row[1]).includes('ช่องทางการขาย')){ inRevenue=true; curGroup=null; continue; }
+    if(a.startsWith('รวม')){ inRevenue=false; curGroup=null; continue; }
+    if(a.startsWith('ลำดับ')) continue;
+
+    if(inRevenue){
+      const ch=impChannel(row[1]);
+      const net=impNum(row[9])||(impNum(row[6])+impNum(row[7]));
+      if(ch && net>0) out.push({type:'revenue', cat:ch, amount:net, date:'', branch:'', desc:impTxt(row[1]), source:'import'});
+      continue;
+    }
+    if(curGroup){
+      const date=impDate(row[1]);
+      const b1=impNum(row[7]), b2=impNum(row[8]);
+      const total=impNum(row[9])||(b1+b2);
+      const desc=impTxt(row[2]);
+      if(total>0 && (date||desc)){
+        const branch = (b2>0 && b1===0) ? 'b2' : 'b1';
+        const acctTxt=impTxt(row[11]);
+        const account = acctTxt.includes('ธนเดช')?'thanadech':(acctTxt?'company':'');
+        out.push({type:'cost', group:curGroup, cat:'', amount:total, date, branch, vendor:impTxt(row[5]), note:impTxt(row[10]), account, desc, source:'import'});
+        if(date) monthsCount[date.slice(0,7)]=(monthsCount[date.slice(0,7)]||0)+1;
+      }
+    }
+  }
+  const dom=Object.entries(monthsCount).sort((a,b)=>b[1]-a[1])[0];
+  const ym=dom?dom[0]:new Date().toISOString().slice(0,7);
+  out.forEach(e=>{ if(!e.date) e.date=ym+'-01'; });
+  return out;
+}
+
+function renderImportPreview(){
+  const status=document.getElementById('import-status');
+  const body=document.getElementById('import-preview-body');
+  if(!importedRows.length){ status.textContent='⚠️ ไม่พบรายการที่อ่านได้ — กรุณาตรวจรูปแบบไฟล์ (ควรเป็นรายงานสรุปรายเดือนของวีเกน)'; document.getElementById('import-preview').style.display='none'; document.getElementById('import-confirm-btn').style.display='none'; return; }
+  const nCost=importedRows.filter(e=>e.type==='cost').length;
+  const nRev=importedRows.filter(e=>e.type==='revenue').length;
+  status.innerHTML=`✅ อ่านได้ <strong>${importedRows.length}</strong> รายการ (ค่าใช้จ่าย ${nCost} · รายรับ ${nRev}) — ตรวจสอบก่อนนำเข้า`;
+  body.innerHTML=importedRows.slice(0,200).map(e=>{
+    const isRev=e.type==='revenue';
+    const label=isRev?revChannel(e):groupLabel(costGroup(e));
+    return `<tr><td>${esc(e.date)}</td><td>${isRev?'รายรับ':'ค่าใช้จ่าย'}</td><td>${esc(label)}</td><td>${esc(branchLabel(e.branch))}</td><td>${esc(e.vendor||'')}</td><td style="text-align:right">฿${fmt(e.amount)}</td></tr>`;
+  }).join('')+(importedRows.length>200?`<tr><td colspan="6" style="text-align:center;color:var(--muted)">… และอีก ${importedRows.length-200} รายการ</td></tr>`:'');
+  document.getElementById('import-preview').style.display='block';
+  document.getElementById('import-confirm-btn').style.display='';
+}
+
+function confirmImport(){
+  if(!importedRows.length||!entriesRef)return;
+  if(!currentUser){ changeUser(); showToast('⚠️ กรุณาเลือกชื่อผู้ใช้ก่อน',true); return; }
+  if(!confirm(`นำเข้า ${importedRows.length} รายการเข้าระบบ?`))return;
+  const btn=document.getElementById('import-confirm-btn'); btn.disabled=true; btn.textContent='กำลังนำเข้า...';
+  const updates={};
+  importedRows.forEach(e=>{ const id=uid()+Math.random().toString(36).slice(2,5); updates[id]={...e, createdBy:currentUser, importedAt:new Date().toISOString().slice(0,10)}; });
+  entriesRef.update(updates)
+    .then(()=>{ showToast('✅ นำเข้า '+importedRows.length+' รายการสำเร็จ'); closeImport(); })
+    .catch(err=>showToast('❌ '+err.message,true))
+    .finally(()=>{ btn.disabled=false; btn.textContent='💾 นำเข้าทั้งหมด'; });
 }
 
 // ═══════════════════════════════════════════
