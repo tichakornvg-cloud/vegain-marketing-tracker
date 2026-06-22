@@ -1119,29 +1119,88 @@ function renderDashboard() {
         <li>จำนวนรายการต้นทุนทั้งหมด: <strong>${view.length}</strong> รายการ</li>
       </ul></div>`;
   } else {
-    // ── per-group highlights ──
-    const avg=view.length?total/view.length:0;
-    const maxItem=[...view].sort((a,b)=>b.amount-a.amount)[0];
-    const subT={}; view.forEach(e=>{ const k=isRevView?revChannel(e):costSubLabel(e); subT[k]=(subT[k]||0)+e.amount; });
+    // ── tailored, decision-oriented insights per group ──
+    const count=view.length, avg=count?total/count:0;
+    const pf=x=>x.toFixed(1)+'%';
+    const pctRev=totalRevAll? total/totalRevAll*100 : 0;
+    const vCount={}, vTotal={};
+    view.forEach(e=>{ const v=(e.vendor||'').trim(); if(!v)return; vCount[v]=(vCount[v]||0)+1; vTotal[v]=(vTotal[v]||0)+e.amount; });
+    const topFreq=Object.entries(vCount).sort((a,b)=>b[1]-a[1])[0];
+    const topSpend=Object.entries(vTotal).sort((a,b)=>b[1]-a[1])[0];
+    const vendorShare=(topSpend&&total)? topSpend[1]/total*100:0;
+    const subT={}; view.forEach(e=>{ const kk=isRevView?revChannel(e):costSubLabel(e); subT[kk]=(subT[kk]||0)+e.amount; });
     const topSub=Object.entries(subT).sort((a,b)=>b[1]-a[1])[0];
-    let hi='';
+    const subShare=(topSub&&total)? topSub[1]/total*100:0;
+    const maxItem=[...view].sort((a,b)=>b.amount-a.amount)[0];
+    const b1=view.filter(e=>(e.branch||'b1')==='b1').reduce((s,e)=>s+e.amount,0);
+    const b2=view.filter(e=>(e.branch||'b1')==='b2').reduce((s,e)=>s+e.amount,0);
+    let momPct=null;
+    if(!isYear){ const idx=months.indexOf(selectedMonth); if(idx>0){ const pm=months[idx-1]; const pt=appData.filter(e=>matchView(e,pm)).reduce((s,e)=>s+e.amount,0); if(pt>0) momPct=(total-pt)/pt*100; } }
+    const avgPerMonth = isYear && months.length ? total/months.length : null;
+    const k=(label,val,sub,cls)=>`<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-val ${cls||''}" style="font-size:16px">${val}</div><div class="kpi-sub">${sub||''}</div></div>`;
+    const momVal = momPct!=null ? ((momPct>=0?'▲ +':'▼ ')+Math.abs(momPct).toFixed(0)+'%') : (avgPerMonth!=null?'฿'+fmt(Math.round(avgPerMonth)):'—');
+    const momSub = momPct!=null ? 'เทียบเดือนก่อน' : (avgPerMonth!=null?'เฉลี่ย/เดือน':'');
+    const momClsCost = momPct==null?'':(momPct>0?'col-red':'col-green');
+    const momClsRev  = momPct==null?'':(momPct>0?'col-green':'col-red');
+    const kTotal = k('ยอดรวม','฿'+fmt(total),esc(periodLabel)+' · '+count+' รายการ', isRevView?'col-green':'col-red');
+    const kMomCost = k('แนวโน้ม',momVal,momSub,momClsCost);
+    const kRev = pctRev?k('% ของยอดขาย',pf(pctRev),'ยอดขาย ฿'+fmt(totalRevAll)):k('เฉลี่ย/รายการ','฿'+fmt(Math.round(avg)),count+' รายการ');
+    const kVendorSpend = topSpend?k('ร้านที่จ่ายมากสุด',esc(topSpend[0]),'฿'+fmt(topSpend[1])+' ('+pf(vendorShare)+')'):k('เฉลี่ย/รายการ','฿'+fmt(Math.round(avg)),'');
+    const kVendorFreq = topFreq?k('สั่งบ่อยสุด',esc(topFreq[0]),topFreq[1]+' ครั้ง'):k('จำนวนรายการ',count,'รายการ');
+    const kSub = topSub?k('ประเภทย่อยเด่น',esc(topSub[0]),'฿'+fmt(topSub[1])+' ('+pf(subShare)+')'):k('—','—','');
+    const kMax = maxItem?k('รายการแพงสุด','฿'+fmt(maxItem.amount),esc((maxItem.desc||revChannel(maxItem)||'').slice(0,26))):k('—','—','');
+    const kBranch = k('แบ่งสาขา','฿'+fmt(b1)+' / ฿'+fmt(b2),'สาขา 1 / สาขา 2');
+
+    let kpis=[], notes=[];
+    const warn=(c,t)=>c?(' ⚠️ '+t):'';
     if (isRevView) {
-      hi=`
-        <div class="kpi"><div class="kpi-label">ช่องทางขายดีสุด</div><div class="kpi-val" style="font-size:15px">${topSub?esc(topSub[0]):'—'}</div><div class="kpi-sub">${topSub?'฿'+fmt(topSub[1]):''}</div></div>
-        <div class="kpi"><div class="kpi-label">รายการสูงสุด</div><div class="kpi-val col-green">${maxItem?'฿'+fmt(maxItem.amount):'—'}</div><div class="kpi-sub">${maxItem?esc(revChannel(maxItem)):''}</div></div>
-        <div class="kpi"><div class="kpi-label">เฉลี่ยต่อรายการ</div><div class="kpi-val" style="font-size:16px">฿${fmt(Math.round(avg))}</div><div class="kpi-sub">${view.length} รายการ</div></div>`;
-    } else {
-      const vCount={}, vTotal={};
-      view.forEach(e=>{ const v=(e.vendor||'').trim(); if(!v) return; vCount[v]=(vCount[v]||0)+1; vTotal[v]=(vTotal[v]||0)+e.amount; });
-      const topFreq=Object.entries(vCount).sort((a,b)=>b[1]-a[1])[0];
-      const topSpend=Object.entries(vTotal).sort((a,b)=>b[1]-a[1])[0];
-      hi=`
-        <div class="kpi"><div class="kpi-label">🔁 สั่งบ่อยสุด (ร้าน)</div><div class="kpi-val" style="font-size:15px">${topFreq?esc(topFreq[0]):'—'}</div><div class="kpi-sub">${topFreq?topFreq[1]+' ครั้ง':'ไม่มีข้อมูลร้านค้า'}</div></div>
-        <div class="kpi"><div class="kpi-label">💰 จ่ายให้มากสุด (ร้าน)</div><div class="kpi-val" style="font-size:15px">${topSpend?esc(topSpend[0]):'—'}</div><div class="kpi-sub">${topSpend?'฿'+fmt(topSpend[1]):''}</div></div>
-        <div class="kpi"><div class="kpi-label">🔥 รายการแพงสุด</div><div class="kpi-val col-red">${maxItem?'฿'+fmt(maxItem.amount):'—'}</div><div class="kpi-sub">${maxItem?esc((maxItem.desc||'').slice(0,28)||'—'):''}</div></div>
-        <div class="kpi"><div class="kpi-label">📊 ประเภทย่อยเด่น</div><div class="kpi-val" style="font-size:15px">${topSub&&topSub[0]?esc(topSub[0]):'—'}</div><div class="kpi-sub">${topSub?'฿'+fmt(topSub[1])+' · เฉลี่ย/รายการ ฿'+fmt(Math.round(avg)):''}</div></div>`;
+      kpis=[kTotal, topSub?k('ช่องทางหลัก',esc(topSub[0]),pf(subShare)+' ของรายรับ'):kRev, k('การเติบโต',momVal,momSub,momClsRev), kMax];
+      if(topSub) notes.push(`ช่องทางหลักคือ <strong>${esc(topSub[0])}</strong> คิดเป็น ${pf(subShare)} ของรายรับ${warn(subShare>50,'พึ่งพาช่องทางเดียวสูง ควรกระจายช่องทาง')}`);
+      if(momPct!=null) notes.push(`รายรับ${momPct>=0?'เติบโต':'ลดลง'} ${Math.abs(momPct).toFixed(0)}% จากเดือนก่อน`);
+      if(maxItem) notes.push(`ยอดรายการเดียวสูงสุด ฿${fmt(maxItem.amount)} (${esc(revChannel(maxItem))})`);
+    } else if (selectedGroup==='marketing_ad') {
+      kpis=[kTotal, kRev, kSub, kMomCost];
+      notes.push(`ค่าโฆษณาคิดเป็น <strong>${pf(pctRev)}</strong> ของยอดขาย${warn(pctRev>15,'ค่อนข้างสูง ลองทบทวน ROAS แต่ละแพลตฟอร์ม')}`);
+      if(topSub) notes.push(`ลงเงินกับ <strong>${esc(topSub[0])}</strong> มากสุด (${pf(subShare)} ของค่าโฆษณา)`);
+      if(momPct!=null) notes.push(`ค่าโฆษณา${momPct>=0?'เพิ่มขึ้น':'ลดลง'} ${Math.abs(momPct).toFixed(0)}% จากเดือนก่อน — ${momPct>20?'ตรวจว่ายอดขายโตตามไหม':'อยู่ในเกณฑ์ปกติ'}`);
+    } else if (selectedGroup==='payroll') {
+      kpis=[kTotal, kRev, kBranch, kMomCost];
+      notes.push(`ค่าแรงคิดเป็น <strong>${pf(pctRev)}</strong> ของยอดขาย${warn(pctRev>30,'สูง ควรเฝ้าระวัง productivity')}`);
+      notes.push(`แบ่งภาระสาขา 1 ฿${fmt(b1)} · สาขา 2 ฿${fmt(b2)}`);
+      if(momPct!=null) notes.push(`ค่าแรง${momPct>=0?'เพิ่มขึ้น':'ลดลง'} ${Math.abs(momPct).toFixed(0)}% จากเดือนก่อน`);
+    } else if (selectedGroup==='material') {
+      kpis=[kTotal, kRev, kVendorSpend, kMax];
+      notes.push(`ต้นทุนวัตถุดิบคิดเป็น <strong>${pf(pctRev)}</strong> ของยอดขาย`);
+      if(topSpend) notes.push(`ซัพพลายเออร์หลัก: <strong>${esc(topSpend[0])}</strong> (${pf(vendorShare)} ของวัตถุดิบ)${warn(vendorShare>40,'พึ่งพารายเดียวสูง ควรมี backup supplier')}`);
+      if(topFreq) notes.push(`สั่งบ่อยสุด: <strong>${esc(topFreq[0])}</strong> (${topFreq[1]} ครั้ง)`);
+    } else if (selectedGroup==='packaging') {
+      kpis=[kTotal, kVendorSpend, kSub, kMax];
+      if(topSub) notes.push(`กลุ่มที่ใช้มากสุด: <strong>${esc(topSub[0])}</strong> (${pf(subShare)})`);
+      if(topSpend) notes.push(`สั่งจาก <strong>${esc(topSpend[0])}</strong> มากสุด (฿${fmt(topSpend[1])})`);
+      if(maxItem) notes.push(`รายการก้อนใหญ่สุด: ${esc((maxItem.desc||'').slice(0,40))} ฿${fmt(maxItem.amount)} — มักเป็นการสต็อกล่วงหน้า`);
+    } else if (selectedGroup==='shipping') {
+      kpis=[kTotal, kRev, kVendorSpend, kSub];
+      notes.push(`ค่าขนส่งคิดเป็น <strong>${pf(pctRev)}</strong> ของยอดขาย${warn(pctRev>7,'สูง ลองเทียบเรตผู้ให้บริการ')}`);
+      if(topSpend) notes.push(`ผู้ให้บริการหลัก: <strong>${esc(topSpend[0])}</strong> (${pf(vendorShare)})`);
+      if(momPct!=null) notes.push(`ค่าขนส่ง${momPct>=0?'เพิ่มขึ้น':'ลดลง'} ${Math.abs(momPct).toFixed(0)}% จากเดือนก่อน`);
+    } else if (selectedGroup==='tax') {
+      kpis=[kTotal, kSub, k('จำนวนรายการ',count,'รายการ'), kMomCost];
+      if(topSub) notes.push(`องค์ประกอบหลัก: <strong>${esc(topSub[0])}</strong> (${pf(subShare)})`);
+      notes.push('เป็นรายจ่ายตามภาระผูกพัน/กฎหมาย — ควรกันงบล่วงหน้าให้ครบทุกงวด');
+    } else if (selectedGroup==='rent') {
+      kpis=[kTotal, kBranch, kMomCost, kMax];
+      notes.push('ค่าเช่าเป็น <strong>ต้นทุนคงที่</strong> — ควรนิ่งทุกเดือน');
+      if(momPct!=null && Math.abs(momPct)>1) notes.push(`⚠️ เดือนนี้เปลี่ยนจากเดือนก่อน ${momPct.toFixed(0)}% — ตรวจสอบว่ามีค่าใช้จ่ายพิเศษหรือไม่`);
+    } else { // other
+      kpis=[kTotal, kVendorSpend, kMax, kMomCost];
+      notes.push('หมวดเบ็ดเตล็ด — จับตารายการก้อนใหญ่ที่อาจซ่อนต้นทุนที่ควรแยกหมวด');
+      if(maxItem) notes.push(`รายการใหญ่สุด: ${esc((maxItem.desc||'').slice(0,40))} ฿${fmt(maxItem.amount)}`);
+      if(momPct!=null) notes.push(`รวม${momPct>=0?'เพิ่มขึ้น':'ลดลง'} ${Math.abs(momPct).toFixed(0)}% จากเดือนก่อน`);
     }
-    const hiCard=`<div class="card"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📌 สรุปประเด็น — ${esc(viewName)}</div><div class="kpi-row">${hi}</div></div>`;
+
+    const hiCard=`<div class="card"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📌 ประเด็นสำคัญ — ${esc(viewName)}</div>
+      <div class="kpi-row">${kpis.join('')}</div>
+      ${notes.length?`<ul style="margin:14px 0 0;padding-left:18px;font-size:13px;line-height:1.9">${notes.map(n=>'<li>'+n+'</li>').join('')}</ul>`:''}</div>`;
 
     // ── detail list ──
     const rows=[...view].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
