@@ -244,6 +244,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 
 <nav class="nav">
   <button class="nav-btn active" onclick="nav('dashboard',this)">📊 Dashboard</button>
+  <button class="nav-btn" onclick="nav('mktperf',this)">📣 Marketing Performance</button>
   <button class="nav-btn" onclick="nav('log',this)">📋 Log รายการ</button>
   <button class="nav-btn" onclick="nav('campaign',this)">🎯 แคมเปญ</button>
 </nav>
@@ -280,6 +281,23 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
         <tbody id="cat-body"></tbody></table>
       </div>
     </div>
+  </div>
+
+  <!-- ══ MARKETING PERFORMANCE ══ -->
+  <div id="tab-mktperf" class="section">
+    <div class="log-header">
+      <div style="font-size:16px;font-weight:700">📣 Marketing Performance</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="mp-month" onchange="renderMktPerf()" style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border)"></select>
+        <button class="btn btn-primary btn-sm" onclick="openModalMkt()">+ เพิ่มค่าใช้จ่าย Marketing</button>
+      </div>
+    </div>
+    <div id="mp-kpi" class="kpi-row"></div>
+    <div id="mp-empty" class="empty" style="display:none">
+      <div class="ico">📣</div>
+      <p>ยังไม่มีค่าใช้จ่าย Marketing — กด <strong>+ เพิ่มค่าใช้จ่าย Marketing</strong> เพื่อเริ่ม</p>
+    </div>
+    <div id="mp-list"></div>
   </div>
 
   <!-- ══ CAMPAIGN ══ -->
@@ -417,6 +435,25 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 </div>
 </div>
 
+<!-- ══ CAMPAIGN RESULT MODAL ══ -->
+<div class="overlay" id="result-overlay">
+<div class="modal" onclick="event.stopPropagation()">
+  <div class="modal-title">📈 ผลแคมเปญ: <span id="result-camp-name"></span></div>
+  <div class="form-grid">
+    <div class="form-group"><label class="fl">ลูกค้าใหม่ (New) — คน</label><input type="number" id="r-new" min="0" placeholder="0"></div>
+    <div class="form-group"><label class="fl">Potential — คน</label><input type="number" id="r-potential" min="0" placeholder="0"></div>
+    <div class="form-group"><label class="fl">Redemption: จากกี่คน (ฐาน)</label><input type="number" id="r-redeem-base" min="0" placeholder="0"></div>
+    <div class="form-group"><label class="fl">Redemption: redeem กี่คน</label><input type="number" id="r-redeem-count" min="0" placeholder="0"></div>
+    <div class="form-group full"><label class="fl">ยอดขายที่ได้จากแคมเปญ (฿)</label><div class="pfx"><span>฿</span><input type="number" id="r-sales" min="0" placeholder="0"></div></div>
+    <div class="form-group full"><label class="fl">Note (ไม่บังคับ)</label><textarea id="r-note" rows="2" placeholder="หมายเหตุผลแคมเปญ..."></textarea></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn btn-ghost" onclick="closeResult()">ยกเลิก</button>
+    <button class="btn btn-primary" onclick="saveResult()">💾 บันทึกผล</button>
+  </div>
+</div>
+</div>
+
 <!-- ══ IMPORT MODAL ══ -->
 <div class="overlay" id="import-overlay">
 <div class="modal" onclick="event.stopPropagation()" style="max-width:760px">
@@ -515,7 +552,8 @@ function accountLabel(a){ return ACCOUNTS[a] || ''; }
 // ═══════════════════════════════════════════
 let appData = [];        // in-memory cache from Firebase
 let campaignNames = [];  // autocomplete list from Firebase
-let entriesRef, campaignsRef, usersRef;
+let entriesRef, campaignsRef, usersRef, resultsRef;
+let campaignResults = {};   // { campaignName: {newCust,potential,redeemBase,redeemCount,sales,note} }
 let userNames = [];
 let currentUser = localStorage.getItem('vg_user') || '';
 let isConnected = false;
@@ -578,6 +616,13 @@ function initFirebase() {
     entriesRef  = db.ref('entries');
     campaignsRef = db.ref('campaigns');
     usersRef     = db.ref('employees');
+    resultsRef   = db.ref('campaign_results');
+
+    // Real-time listener — campaign results
+    resultsRef.on('value', snap => {
+      campaignResults = snap.val() || {};
+      if (document.getElementById('tab-mktperf').classList.contains('active')) renderMktPerf();
+    });
 
     // Real-time listener — employee names
     usersRef.on('value', snap => {
@@ -607,6 +652,7 @@ function initFirebase() {
       renderDashboard();
       renderLog();
       renderCampaigns();
+      renderMktPerf();
     });
 
     // Fallback: hide loading overlay after 5s even if onValue is slow
@@ -755,6 +801,7 @@ function nav(tab, btn) {
   document.getElementById('tab-'+tab).classList.add('active');
   btn.classList.add('active');
   if (tab==='dashboard') renderDashboard();
+  if (tab==='mktperf') renderMktPerf();
   if (tab==='log') renderLog();
   if (tab==='campaign') renderCampaigns();
 }
@@ -907,7 +954,7 @@ let selectedBranch='all';  // 'all' | 'b1' | 'b2'
 
 function renderGroupPills() {
   const el = document.getElementById('group-pills'); if (!el) return; el.innerHTML='';
-  const opts = [['all','💰 ต้นทุนทั้งหมด'], ...Object.entries(COST_GROUPS).map(([k,v])=>[k,v.label]), ['revenue','📈 รายรับ']];
+  const opts = [['all','💰 ต้นทุนทั้งหมด'], ...Object.entries(COST_GROUPS).filter(([k])=>k!=='marketing').map(([k,v])=>[k,v.label]), ['revenue','📈 รายรับ']];
   opts.forEach(([k,label]) => {
     const b=document.createElement('button'); b.className='pill'+(selectedGroup===k?' sel':''); b.textContent=label;
     b.onclick=()=>{ selectedGroup=k; renderDashboard(); }; el.appendChild(b);
@@ -958,11 +1005,14 @@ function renderDashboard() {
   const isRevView=selectedGroup==='revenue';
   const viewType=isRevView?'revenue':'cost';
   let view=base.filter(e=>e.type===viewType);
-  if (!isRevView && selectedGroup!=='all') view=view.filter(e=>costGroup(e)===selectedGroup);
+  if (!isRevView) {
+    if (selectedGroup==='all') view=view.filter(e=>costGroup(e)!=='marketing');
+    else view=view.filter(e=>costGroup(e)===selectedGroup);
+  }
 
   const total=view.reduce((s,e)=>s+e.amount,0);
   const totalRevAll=base.filter(e=>e.type==='revenue').reduce((s,e)=>s+e.amount,0);
-  const totalCostAll=base.filter(e=>e.type==='cost').reduce((s,e)=>s+e.amount,0);
+  const totalCostAll=base.filter(e=>e.type==='cost'&&costGroup(e)!=='marketing').reduce((s,e)=>s+e.amount,0);
 
   const keyOf = e => isRevView ? revChannel(e) : (selectedGroup==='all' ? costGroup(e) : costSubLabel(e));
   const labelOf = k => (isRevView || selectedGroup!=='all') ? k : groupLabel(k);
@@ -1010,7 +1060,7 @@ function renderDashboard() {
   // trend bar
   const matchView = (e,m) => monthOf(e.date)===m && e.type===viewType
     && (selectedBranch==='all' || (e.branch||'b1')===selectedBranch)
-    && (isRevView || selectedGroup==='all' || costGroup(e)===selectedGroup);
+    && (isRevView || (selectedGroup==='all' ? costGroup(e)!=='marketing' : costGroup(e)===selectedGroup));
   const barTitle=document.getElementById('bar-title');
   if (barChart){barChart.destroy();barChart=null;}
   const barCtx=document.getElementById('cBar').getContext('2d');
@@ -1221,6 +1271,107 @@ function exportCSV() {
   a.download='vegain-marketing-log.csv';a.click();
 }
 
+
+
+// ═══════════════════════════════════════════
+//  MARKETING PERFORMANCE
+// ═══════════════════════════════════════════
+let mpNames = [];
+function num0(v){ return parseFloat(v)||0; }
+function resKey(name){ return (name||'').replace(/[.#$\[\]\/]/g,'_').replace(/\s+/g,'_') || '_'; }
+
+function openModalMkt(){
+  openModal();
+  document.getElementById('f-group').value='marketing';
+  populateCatFromGroup();
+}
+
+function renderMktPerf(){
+  const sec=document.getElementById('tab-mktperf'); if(!sec) return;
+  const mkAll=appData.filter(e=>e.type==='cost' && costGroup(e)==='marketing');
+  const months=[...new Set(mkAll.map(e=>monthOf(e.date)))].filter(Boolean).sort();
+  const sel=document.getElementById('mp-month'); const cur=sel.value;
+  sel.innerHTML='<option value="">📅 ทั้งปี</option>'+months.map(m=>`<option value="${m}">${thMonth(m)}</option>`).join('');
+  if(cur && (cur===''||months.includes(cur))) sel.value=cur;
+  const fMonth=sel.value;
+
+  let mkt=mkAll;
+  if(fMonth) mkt=mkt.filter(e=>monthOf(e.date)===fMonth);
+
+  const empty=document.getElementById('mp-empty'); const list=document.getElementById('mp-list');
+  const byCamp={};
+  mkt.forEach(e=>{ const c=e.campaign||'(ไม่ระบุแคมเปญ)'; (byCamp[c]=byCamp[c]||[]).push(e); });
+  const names=Object.keys(byCamp).sort((a,b)=>byCamp[b].reduce((s,e)=>s+e.amount,0)-byCamp[a].reduce((s,e)=>s+e.amount,0));
+  mpNames=names;
+
+  const totalCost=mkt.reduce((s,e)=>s+e.amount,0);
+  let totalSales=0; names.forEach(n=>{ const r=campaignResults[resKey(n)]; if(r) totalSales+=num0(r.sales); });
+  const roas=totalCost?(totalSales/totalCost):0;
+  document.getElementById('mp-kpi').innerHTML=`
+    <div class="kpi"><div class="kpi-label">ค่าใช้จ่าย Marketing</div><div class="kpi-val col-red">฿${fmt(totalCost)}</div><div class="kpi-sub">${fMonth?thMonth(fMonth):'ทั้งปี'}</div></div>
+    <div class="kpi"><div class="kpi-label">จำนวนแคมเปญ</div><div class="kpi-val">${names.length}</div><div class="kpi-sub">${mkt.length} รายการ</div></div>
+    <div class="kpi"><div class="kpi-label">ยอดขายจากแคมเปญ</div><div class="kpi-val col-green">฿${fmt(totalSales)}</div><div class="kpi-sub">รวมที่กรอกผล</div></div>
+    <div class="kpi"><div class="kpi-label">ROAS รวม</div><div class="kpi-val ${roas>=1?'col-green':'col-red'}">${roas.toFixed(2)}x</div><div class="kpi-sub">ยอดขาย ÷ ต้นทุน</div></div>`;
+
+  if(!names.length){ empty.style.display='block'; list.innerHTML=''; return; }
+  empty.style.display='none';
+
+  const stat=(label,val,sub,cls)=>`<div class="camp-stat"><div class="camp-stat-label">${label}</div><div class="camp-stat-val ${cls||''}">${val}</div>${sub?`<div style="font-size:10px;color:var(--muted)">${sub}</div>`:''}</div>`;
+  list.innerHTML=names.map((name,i)=>{
+    const cost=byCamp[name].reduce((s,e)=>s+e.amount,0);
+    const r=campaignResults[resKey(name)]||{};
+    const nc=num0(r.newCust), pot=num0(r.potential), rb=num0(r.redeemBase), rcnt=num0(r.redeemCount), sales=num0(r.sales);
+    const redPct=rb?(rcnt/rb*100):0;
+    const cpa=nc?(cost/nc):0;
+    const roasC=cost?(sales/cost):0;
+    const isUnassigned=name==='(ไม่ระบุแคมเปญ)';
+    return `<div class="camp-card">
+      <div class="camp-card-header">
+        <div class="camp-name">📣 ${esc(name)}</div>
+        ${isUnassigned?'':`<button class="camp-add-btn" onclick="openResult(${i})">📈 กรอก/แก้ผล</button>`}
+      </div>
+      <div class="camp-stats">
+        ${stat('💸 ค่าใช้จ่าย','฿'+fmt(cost),byCamp[name].length+' รายการ','col-red')}
+        ${stat('🧑‍🤝‍🧑 ลูกค้าใหม่',fmt(nc)+' คน','potential '+fmt(pot))}
+        ${stat('🎟️ Redemption',fmt(rcnt)+' / '+fmt(rb),redPct.toFixed(1)+'%')}
+        ${stat('💰 ยอดขาย','฿'+fmt(sales),'','col-green')}
+        ${stat('📈 ROAS',roasC.toFixed(2)+'x','',roasC>=1?'col-green':'col-red')}
+        ${stat('🎯 CPA',nc?'฿'+fmt(Math.round(cpa)):'—','ต่อลูกค้าใหม่ 1 คน')}
+      </div>
+      ${r.note?`<div style="font-size:12px;color:var(--muted);margin-top:8px">📝 ${esc(r.note)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+let resultEditName=null;
+function openResult(i){
+  const name=mpNames[i]; if(name==null) return;
+  resultEditName=name;
+  document.getElementById('result-camp-name').textContent=name;
+  const r=campaignResults[resKey(name)]||{};
+  document.getElementById('r-new').value=r.newCust||'';
+  document.getElementById('r-potential').value=r.potential||'';
+  document.getElementById('r-redeem-base').value=r.redeemBase||'';
+  document.getElementById('r-redeem-count').value=r.redeemCount||'';
+  document.getElementById('r-sales').value=r.sales||'';
+  document.getElementById('r-note').value=r.note||'';
+  document.getElementById('result-overlay').classList.add('open');
+}
+function closeResult(){ document.getElementById('result-overlay').classList.remove('open'); }
+function saveResult(){
+  if(!resultsRef||!resultEditName) return;
+  const data={ name:resultEditName,
+    newCust:num0(document.getElementById('r-new').value),
+    potential:num0(document.getElementById('r-potential').value),
+    redeemBase:num0(document.getElementById('r-redeem-base').value),
+    redeemCount:num0(document.getElementById('r-redeem-count').value),
+    sales:num0(document.getElementById('r-sales').value),
+    note:document.getElementById('r-note').value.trim(),
+    updatedBy:currentUser||'' };
+  resultsRef.child(resKey(resultEditName)).set(data)
+    .then(()=>{ showToast('✅ บันทึกผลแคมเปญแล้ว'); closeResult(); })
+    .catch(err=>showToast('❌ '+err.message,true));
+}
 
 // ═══════════════════════════════════════════
 //  IMPORT FROM EXCEL / SHEET
