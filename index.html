@@ -476,7 +476,8 @@ const LEGACY_MKT = { digital:'Digital Ads', influencer:'Influencer / KOL', moder
 
 // 8 top-level cost groups
 const COST_GROUPS = {
-  marketing: { label:'📣 Marketing / โฆษณา',        color:'#2d7a4f', subs: MKT_SUBS },
+  marketing:    { label:'📊 Marketing Performance',     color:'#2d7a4f', subs: MKT_SUBS },
+  marketing_ad: { label:'📢 Marketing Ad (จาก Excel)',  color:'#65a30d', subs:['Facebook Ads','Google Ads','TikTok Ads','LINE Ads','Software / Tools','อื่นๆ'] },
   payroll:   { label:'👥 เงินเดือนพนักงาน',          color:'#3b82f6', subs:['เงินเดือนพนักงาน','ค่าจ้างรายวัน','โบนัส','เบิกล่วงหน้า','อื่นๆ'] },
   material:  { label:'🥬 วัตถุดิบ',                   color:'#f59e0b', subs:['วัตถุดิบสด','แช่แข็ง','แห้ง / Supplement','กลิ่นผสม / วานิลลา','อื่นๆ'] },
   packaging: { label:'📦 อุปกรณ์ + Packaging',       color:'#8b5cf6', subs:['บรรจุภัณฑ์ (ขวด/ฝา/กล่อง)','สลาก / สติกเกอร์','อุปกรณ์หน้าร้าน','อื่นๆ'] },
@@ -1225,7 +1226,7 @@ function exportCSV() {
 //  IMPORT FROM EXCEL / SHEET
 // ═══════════════════════════════════════════
 let importedRows = [];
-const GROUP_BY_NUM = {1:'marketing',2:'payroll',3:'material',4:'packaging',5:'shipping',6:'tax',7:'rent',8:'other'};
+const GROUP_BY_NUM = {1:'marketing_ad',2:'payroll',3:'material',4:'packaging',5:'shipping',6:'tax',7:'rent',8:'other'};
 
 function openImport() {
   document.getElementById('import-file').value='';
