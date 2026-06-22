@@ -280,6 +280,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
         <table class="tbl"><thead><tr><th id="cat-col-1">หมวด</th><th>จำนวน (฿)</th><th id="cat-col-3">% ของยอดรวม</th></tr></thead>
         <tbody id="cat-body"></tbody></table>
       </div>
+      <div id="dash-extra"></div>
     </div>
   </div>
 
@@ -1094,6 +1095,40 @@ function renderDashboard() {
     return `<tr><td><span class="dot" style="background:${color}"></span>${esc(labelOf(k))}</td><td><strong>฿${fmt(v)}</strong></td>
       <td>${p.toFixed(1)}%<div class="pbar"><div class="pfill" style="width:${p}%;background:${color}"></div></div></td></tr>`;
   }).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted)">ไม่มีข้อมูลในมุมมองนี้</td></tr>';
+
+  // ── detail list (per-group / revenue) or highlights (combined) ──
+  const extra=document.getElementById('dash-extra');
+  if (selectedGroup==='all') {
+    const net=totalRevAll-totalCostAll;
+    const topG=sorted[0];
+    const vend={}; view.forEach(e=>{ const v=(e.vendor||'').trim(); if(v) vend[v]=(vend[v]||0)+e.amount; });
+    const topV=Object.entries(vend).sort((a,b)=>b[1]-a[1])[0];
+    const b1=view.filter(e=>(e.branch||'b1')==='b1').reduce((s,e)=>s+e.amount,0);
+    const b2=view.filter(e=>(e.branch||'b1')==='b2').reduce((s,e)=>s+e.amount,0);
+    const ratio=totalRevAll?(totalCostAll/totalRevAll*100):0;
+    extra.innerHTML=`<div class="card"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📌 สรุปประเด็นสำคัญ — ${esc(periodLabel)}</div>
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-label">ยอดขายรวม</div><div class="kpi-val col-green">฿${fmt(totalRevAll)}</div></div>
+        <div class="kpi"><div class="kpi-label">ต้นทุนรวม (ไม่รวม Mkt Perf)</div><div class="kpi-val col-red">฿${fmt(totalCostAll)}</div></div>
+        <div class="kpi"><div class="kpi-label">${net>=0?'กำไรสุทธิ':'ขาดทุนสุทธิ'}</div><div class="kpi-val ${net>=0?'col-green':'col-red'}">฿${fmt(Math.abs(net))}</div><div class="kpi-sub">ต้นทุน ${ratio.toFixed(0)}% ของยอดขาย</div></div>
+        <div class="kpi"><div class="kpi-label">หมวดจ่ายสูงสุด</div><div class="kpi-val" style="font-size:15px">${topG?esc(groupLabel(topG[0])):'—'}</div><div class="kpi-sub">${topG?'฿'+fmt(topG[1]):''}</div></div>
+      </div>
+      <ul style="margin:14px 0 0;padding-left:18px;font-size:13px;line-height:1.9">
+        ${topV?`<li>ร้านค้า/ผู้รับที่จ่ายมากสุด: <strong>${esc(topV[0])}</strong> — ฿${fmt(topV[1])}</li>`:''}
+        <li>แบ่งตามสาขา: สาขา 1 <strong>฿${fmt(b1)}</strong> · สาขา 2 <strong>฿${fmt(b2)}</strong></li>
+        <li>จำนวนรายการต้นทุนทั้งหมด: <strong>${view.length}</strong> รายการ</li>
+      </ul></div>`;
+  } else {
+    const rows=[...view].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const colHead=isRevView?'<th>วันที่</th><th>ช่องทาง</th><th>สาขา</th><th style="text-align:right">จำนวน</th>':'<th>วันที่</th><th>รายละเอียด</th><th>ผู้รับ/ร้านค้า</th><th>สาขา</th><th style="text-align:right">จำนวน</th>';
+    const body=rows.slice(0,500).map(e=>{
+      if(isRevView) return `<tr><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(revChannel(e))}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--green)">฿${fmt(e.amount)}</td></tr>`;
+      return `<tr><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(e.desc||'—')}${e.cat?'<br><span style="font-size:11px;color:var(--muted)">'+esc(e.cat)+'</span>':''}</td><td>${esc(e.vendor||'—')}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--red)">฿${fmt(e.amount)}</td></tr>`;
+    }).join('');
+    extra.innerHTML=`<div class="card" style="overflow-x:auto"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📋 รายการละเอียด — ${esc(viewName)} (${rows.length} รายการ)</div>
+      <table class="tbl"><thead><tr>${colHead}</tr></thead><tbody>${body||'<tr><td colspan="5" style="text-align:center;color:var(--muted)">ไม่มีรายการ</td></tr>'}</tbody></table>
+      ${rows.length>500?`<div style="font-size:12px;color:var(--muted);text-align:center;margin-top:8px">แสดง 500 รายการแรกจาก ${rows.length}</div>`:''}</div>`;
+  }
 }
 
 // ═══════════════════════════════════════════
