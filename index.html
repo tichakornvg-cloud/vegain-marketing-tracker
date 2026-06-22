@@ -252,8 +252,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   <!-- ══ DASHBOARD ══ -->
   <div id="tab-dashboard" class="section active">
     <div class="pill-row">
+      <span class="pill-label">มุมมอง:</span>
+      <div id="group-pills" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div class="pill-row">
       <span class="pill-label">เดือน:</span>
       <div id="month-pills" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div class="pill-row">
+      <span class="pill-label">สาขา:</span>
+      <div id="branch-pills" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     </div>
     <div id="dash-empty" class="empty" style="display:none">
       <div class="ico">📈</div>
@@ -262,12 +270,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
     <div id="dash-content">
       <div class="kpi-row" id="kpi-row"></div>
       <div class="chart-row">
-        <div class="chart-card"><h3>สัดส่วนค่าใช้จ่าย Marketing</h3><div class="chart-wrap"><canvas id="cDonut"></canvas></div></div>
+        <div class="chart-card"><h3 id="donut-title">สัดส่วนค่าใช้จ่าย</h3><div class="chart-wrap"><canvas id="cDonut"></canvas></div></div>
         <div class="chart-card"><h3 id="bar-title">แนวโน้ม 6 เดือน</h3><div class="chart-wrap"><canvas id="cBar"></canvas></div></div>
       </div>
       <div class="card">
-        <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">รายละเอียดแต่ละหมวด</div>
-        <table class="tbl"><thead><tr><th>หมวด</th><th>จำนวน (฿)</th><th>% ของ Marketing</th><th>เป้าหมาย</th></tr></thead>
+        <div id="cat-table-title" style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">รายละเอียดแต่ละหมวด</div>
+        <table class="tbl"><thead><tr><th id="cat-col-1">หมวด</th><th>จำนวน (฿)</th><th id="cat-col-3">% ของยอดรวม</th></tr></thead>
         <tbody id="cat-body"></tbody></table>
       </div>
     </div>
@@ -315,6 +323,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
         <select id="filter-cat" onchange="renderLog()" style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border)">
           <option value="">ทุกหมวด</option>
         </select>
+        <select id="filter-branch" onchange="renderLog()" style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border)">
+          <option value="">ทุกสาขา</option>
+          <option value="b1">สาขา 1</option>
+          <option value="b2">สาขา 2</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="openImport()">📥 Import Excel</button>
         <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
         <button class="btn btn-primary btn-sm" onclick="openModal()">+ เพิ่มรายการ</button>
       </div>
@@ -343,13 +357,25 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
       <label class="fl">วันที่</label>
       <input type="date" id="f-date">
     </div>
-    <div class="form-group">
-      <label class="fl" id="f-cat-label">หมวดหมู่</label>
-      <select id="f-cat" onchange="updateSubcat()"></select>
+    <div class="form-group" id="f-group-group">
+      <label class="fl">กลุ่มต้นทุน</label>
+      <select id="f-group" onchange="onGroupChange()"></select>
     </div>
-    <div class="form-group full">
-      <label class="fl" id="f-sub-label">ประเภทย่อย</label>
-      <select id="f-sub" onchange="onSubChange()"></select>
+    <div class="form-group">
+      <label class="fl" id="f-cat-label">ประเภทย่อย</label>
+      <select id="f-cat" onchange="onSubChange()"></select>
+    </div>
+    <div class="form-group">
+      <label class="fl">สาขา</label>
+      <select id="f-branch"></select>
+    </div>
+    <div class="form-group" id="f-account-group">
+      <label class="fl">บัญชีที่จ่าย</label>
+      <select id="f-account"></select>
+    </div>
+    <div class="form-group full" id="f-vendor-group">
+      <label class="fl">ผู้รับ / ร้านค้า <span style="font-weight:400;color:var(--muted)">(ไม่บังคับ)</span></label>
+      <input type="text" id="f-vendor" placeholder="เช่น Meta, Makro, iHerb...">
     </div>
     <!-- Campaign name (always visible) -->
     <div class="form-group full" id="f-campaign-group">
@@ -420,26 +446,46 @@ function esc(v) {
 }
 
 // ═══════════════════════════════════════════
-//  CATEGORIES
+//  COST GROUPS / CATEGORIES
 // ═══════════════════════════════════════════
-const COST_CATS = {
-  digital:    { label:'📱 Digital Ads',          color:'#2d7a4f', target:'30-40%', tip:'ค่าโฆษณาที่จ่ายให้แพลตฟอร์ม วัดผล ROAS ทุกเดือน', subs:['Facebook Ads','Instagram Ads','Google Ads','Line OA / Line Ads','TikTok Ads','อื่นๆ (Digital)'] },
-  influencer: { label:'🌟 Influencer / KOL',     color:'#4caf6e', target:'15-20%', tip:'ควรแยก cash กับ seeding ให้ชัด seeding ให้คิดราคาทุนสินค้า', subs:['Cash — จ้างรีวิว','Product Seeding (ราคาทุน)','Affiliate Commission','อื่นๆ (Influencer)'] },
-  modern:     { label:'🏪 Modern Trade',          color:'#f59e0b', target:'20-30%', tip:'ค่าที่ต้องจ่ายเพื่อวางสินค้าใน shelf — นับเป็น marketing เต็มๆ', subs:['Listing Fee / ค่าวางสินค้า','Trade Promotion / Co-op','Shelf / Display Fee','อื่นๆ (Modern Trade)'] },
-  production: { label:'🏭 ค่าผลิต (Production)',  color:'#ec4899', target:'10-15%', tip:'ค่าผลิตสิ่งที่ทำเพื่อ marketing เท่านั้น ไม่รวม COGS ปกติ', subs:['Production - MKT Material','Production - Campaign Material','ถ่ายภาพ / วิดีโอ Product','วัสดุ/ของ Seeding','อื่นๆ (Production)'] },
-  content:    { label:'🎨 Content & Creative',    color:'#8b5cf6', target:'10-15%', tip:'รวม photo, design, copywriting, agency — ผลิตครั้งเดียวใช้ได้นาน', subs:['Graphic Design / Copywriting','Agency / Freelance Fee','Social Media Management','อื่นๆ (Content)'] },
-  event:      { label:'🌿 Wellness Bar & Event',  color:'#3b82f6', target:'5-10%',  tip:'ค่าใช้จ่ายหน้าร้านและกิจกรรม สร้าง experience ให้ลูกค้า', subs:['Event / Tasting','In-store Display / ตกแต่ง','ของแถม / ของขวัญลูกค้า','อื่นๆ (Event)'] },
-  pr:         { label:'📣 PR & Other',             color:'#9ca3af', target:'<5%',    tip:'ค่า PR, ของขวัญ media, ค่าสมาชิก platform ที่ไม่ใช่ ads', subs:['PR / Press Release','ของขวัญ Media','ค่าสมาชิก Platform','อื่นๆ'] },
+// Marketing sub-categories (labels). Legacy keys kept for backward-compat.
+const MKT_SUBS = ['Digital Ads','Influencer / KOL','Modern Trade','Production','Content & Creative','Wellness Bar & Event','PR & Other'];
+const LEGACY_MKT = { digital:'Digital Ads', influencer:'Influencer / KOL', modern:'Modern Trade', production:'Production', content:'Content & Creative', event:'Wellness Bar & Event', pr:'PR & Other' };
+
+// 8 top-level cost groups
+const COST_GROUPS = {
+  marketing: { label:'📣 Marketing / โฆษณา',        color:'#2d7a4f', subs: MKT_SUBS },
+  payroll:   { label:'👥 เงินเดือนพนักงาน',          color:'#3b82f6', subs:['เงินเดือนพนักงาน','ค่าจ้างรายวัน','โบนัส','เบิกล่วงหน้า','อื่นๆ'] },
+  material:  { label:'🥬 วัตถุดิบ',                   color:'#f59e0b', subs:['วัตถุดิบสด','แช่แข็ง','แห้ง / Supplement','กลิ่นผสม / วานิลลา','อื่นๆ'] },
+  packaging: { label:'📦 อุปกรณ์ + Packaging',       color:'#8b5cf6', subs:['บรรจุภัณฑ์ (ขวด/ฝา/กล่อง)','สลาก / สติกเกอร์','อุปกรณ์หน้าร้าน','อื่นๆ'] },
+  shipping:  { label:'🚚 ค่าขนส่ง',                  color:'#ec4899', subs:['ขนส่งในประเทศ','ขนส่งต่างประเทศ','ค่าเดินทางพนักงาน','อื่นๆ'] },
+  tax:       { label:'🧾 ภาษี + ประกันสังคม',        color:'#ef4444', subs:['ภาษี (ภงด./ภพ.)','ประกันสังคม','ค่าธรรมเนียม','อื่นๆ'] },
+  rent:      { label:'🏠 ค่าเช่า / เครื่องจักร',      color:'#14b8a6', subs:['ค่าเช่าพื้นที่','เช่าเครื่องจักร/อุปกรณ์','ค่าแม่บ้าน','อื่นๆ'] },
+  other:     { label:'📋 ค่าใช้จ่ายอื่นๆ',           color:'#9ca3af', subs:['ยา / สุขภาพ','ซ่อมบำรุง','Software / Subscription','ค่าน้ำ/ไฟ/โทรศัพท์','อื่นๆ'] },
 };
 
-const REV_CATS = {
-  bar:       { label:'🏠 Wellness Bar',    color:'#2d7a4f', subs:['ยอดขายหน้าร้าน','Delivery / Take Away','จาก MKT Event'] },
-  partner:   { label:'🤝 ร้านพาร์ทเนอร์', color:'#4caf6e', subs:['ยอดขายพาร์ทเนอร์','Commission Income','จาก MKT Event'] },
-  modern:    { label:'🏪 Modern Trade',    color:'#f59e0b', subs:['ยอดขาย Modern Trade','จาก MKT Event'] },
-  online:    { label:'💻 Online',          color:'#3b82f6', subs:['Shopee','Lazada','เว็บไซต์ / Line','อื่นๆ (Online)'] },
-  event_rev: { label:'🎪 MKT Event',       color:'#ec4899', subs:['จาก MKT Event'] },
-  other:     { label:'📋 อื่นๆ',           color:'#9ca3af', subs:['อื่นๆ'] },
-};
+// Revenue channels (flat). Legacy keys mapped for old revenue entries.
+const REV_CHANNELS = ['Facebook','ทานที่ร้าน','Grab Food','LINE MAN','Shopee','Lazada','ฝากขาย','ขายส่ง','Instagram','Line Official','Line My Shop','Marketing','อื่นๆ'];
+const LEGACY_REV = { bar:'ทานที่ร้าน', partner:'ฝากขาย', modern:'ขายส่ง', online:'Shopee', event_rev:'อื่นๆ', other:'อื่นๆ' };
+
+// Branches & payment accounts
+const BRANCHES = { b1:'สาขา 1', b2:'สาขา 2' };
+const ACCOUNTS = { company:'บัญชีบริษัท', thanadech:'บัญชีธนเดช' };
+
+// palette for sub-category donuts
+const PALETTE = ['#2d7a4f','#4caf6e','#f59e0b','#ec4899','#8b5cf6','#3b82f6','#14b8a6','#ef4444','#9ca3af','#a16207','#0ea5e9','#db2777','#65a30d'];
+
+// ── normalizers (backward compatible with legacy entries) ──
+function costGroup(e){ return e.group || (e.type==='cost' ? 'marketing' : ''); }
+function groupLabel(g){ return COST_GROUPS[g] ? COST_GROUPS[g].label : g; }
+function groupColor(g){ return COST_GROUPS[g] ? COST_GROUPS[g].color : '#9ca3af'; }
+function costSubLabel(e){
+  if (costGroup(e)==='marketing' && LEGACY_MKT[e.cat]) return LEGACY_MKT[e.cat]; // legacy mkt
+  return e.cat || e.sub || 'อื่นๆ';
+}
+function revChannel(e){ return REV_CHANNELS.includes(e.cat) ? e.cat : (LEGACY_REV[e.cat] || e.cat || 'อื่นๆ'); }
+function branchLabel(b){ return BRANCHES[b] || ''; }
+function accountLabel(a){ return ACCOUNTS[a] || ''; }
 
 // ═══════════════════════════════════════════
 //  STATE
@@ -676,7 +722,6 @@ function showToast(msg, isErr) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2600);
 }
-function catInfo(type, catKey) { return type==='cost' ? COST_CATS[catKey] : REV_CATS[catKey]; }
 
 // ═══════════════════════════════════════════
 //  NAV
@@ -705,14 +750,21 @@ function openModal(id) {
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('f-date').value       = entry ? entry.date : today;
   document.getElementById('f-desc').value       = entry ? entry.desc||'' : '';
-  document.getElementById('f-amount').value     = entry ? entry.amount : '';
-  document.getElementById('f-note').value       = entry ? entry.note||'' : '';
-  document.getElementById('f-campaign').value   = entry ? entry.campaign||'' : '';
+  document.getElementById('f-amount').value      = entry ? entry.amount : '';
+  document.getElementById('f-note').value        = entry ? entry.note||'' : '';
+  document.getElementById('f-campaign').value    = entry ? entry.campaign||'' : '';
+  document.getElementById('f-vendor').value       = entry ? entry.vendor||'' : '';
   document.getElementById('f-event-start').value = entry ? entry.eventStart||'' : '';
   document.getElementById('f-event-end').value   = entry ? entry.eventEnd||'' : '';
+  const bsel = document.getElementById('f-branch');
+  bsel.innerHTML = Object.entries(BRANCHES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+  bsel.value = (entry && entry.branch) || 'b1';
+  const asel = document.getElementById('f-account');
+  asel.innerHTML = Object.entries(ACCOUNTS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+  asel.value = (entry && entry.account) || 'company';
   refreshCampaignDatalist();
   renderCampaignChips();
-  setType(entry ? entry.type : 'cost', entry ? entry.cat : null, entry ? entry.sub : null);
+  setType(entry ? entry.type : 'cost', entry);
 }
 
 function closeModal() {
@@ -720,37 +772,43 @@ function closeModal() {
   editId = null;
 }
 
-function setType(type, cat, sub) {
+function setType(type, entry) {
   currentType = type;
   document.getElementById('btn-cost').className = type==='cost' ? 'sel-cost' : '';
   document.getElementById('btn-rev').className  = type==='revenue' ? 'sel-rev' : '';
-  document.getElementById('f-cat-label').textContent = type==='cost' ? 'หมวดหมู่ (ค่าใช้จ่าย)' : 'หมวดหมู่ (รายรับ)';
-  document.getElementById('f-sub-label').textContent = type==='cost' ? 'ประเภทย่อย' : 'ช่องทาง';
-  const cats = type==='cost' ? COST_CATS : REV_CATS;
-  const sel = document.getElementById('f-cat');
-  sel.innerHTML = Object.entries(cats).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('');
-  if (cat) sel.value = cat;
-  updateSubcat(sub);
+  const isCost = type==='cost';
+  document.getElementById('f-group-group').style.display    = isCost ? '' : 'none';
+  document.getElementById('f-account-group').style.display  = isCost ? '' : 'none';
+  document.getElementById('f-vendor-group').style.display   = isCost ? '' : 'none';
+  document.getElementById('f-campaign-group').style.display = isCost ? '' : 'none';
+  document.getElementById('f-cat-label').textContent = isCost ? 'ประเภทย่อย' : 'ช่องทาง';
+  if (isCost) {
+    const gsel = document.getElementById('f-group');
+    gsel.innerHTML = Object.entries(COST_GROUPS).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('');
+    gsel.value = (entry && costGroup(entry)) || 'marketing';
+    populateCatFromGroup(entry ? costSubLabel(entry) : null);
+  } else {
+    const csel = document.getElementById('f-cat');
+    csel.innerHTML = REV_CHANNELS.map(c => `<option value="${c}">${c}</option>`).join('');
+    if (entry) csel.value = revChannel(entry);
+    onSubChange();
+  }
 }
 
-function updateSubcat(forceSub) {
-  const cats = currentType==='cost' ? COST_CATS : REV_CATS;
-  const catKey = document.getElementById('f-cat').value;
-  const info = cats[catKey];
-  const sel = document.getElementById('f-sub');
-  sel.innerHTML = (info?.subs||[]).map(s => `<option value="${s}">${s}</option>`).join('');
-  if (forceSub) sel.value = forceSub;
-  const tip = document.getElementById('f-tip');
-  if (currentType==='cost' && info?.tip) {
-    tip.style.display='block';
-    tip.innerHTML = `<strong>💡 Tips: ${info.label}</strong>${info.tip}`;
-  } else { tip.style.display='none'; }
+function onGroupChange() { populateCatFromGroup(); }
+
+function populateCatFromGroup(forceCat) {
+  const g = document.getElementById('f-group').value;
+  const subs = (COST_GROUPS[g] || {}).subs || [];
+  const csel = document.getElementById('f-cat');
+  csel.innerHTML = subs.map(s => `<option value="${s}">${s}</option>`).join('');
+  if (forceCat && subs.includes(forceCat)) csel.value = forceCat;
   onSubChange();
 }
 
 function onSubChange() {
-  const sub = document.getElementById('f-sub').value;
-  const isEvent = sub === 'จาก MKT Event';
+  const cat = document.getElementById('f-cat').value || '';
+  const isEvent = currentType==='cost' && document.getElementById('f-group').value==='marketing' && /Event/i.test(cat);
   document.getElementById('f-event-range-group').style.display = isEvent ? 'block' : 'none';
   refreshCampaignDatalist();
 }
@@ -760,26 +818,31 @@ function onSubChange() {
 // ═══════════════════════════════════════════
 function saveEntry() {
   if (!entriesRef) { showToast('⚠️ ยังไม่ได้เชื่อมต่อ Firebase', true); return; }
+  const isCost     = currentType==='cost';
   const date       = document.getElementById('f-date').value;
   const cat        = document.getElementById('f-cat').value;
-  const sub        = document.getElementById('f-sub').value;
+  const group      = isCost ? document.getElementById('f-group').value : '';
+  const branch     = document.getElementById('f-branch').value;
+  const account    = isCost ? document.getElementById('f-account').value : '';
+  const vendor     = isCost ? document.getElementById('f-vendor').value.trim() : '';
   const desc       = document.getElementById('f-desc').value.trim();
   const amount     = parseFloat(document.getElementById('f-amount').value)||0;
   const note       = document.getElementById('f-note').value.trim();
-  const campaign   = document.getElementById('f-campaign').value.trim();
+  const campaign   = isCost ? document.getElementById('f-campaign').value.trim() : '';
   const eventStart = document.getElementById('f-event-start').value;
   const eventEnd   = document.getElementById('f-event-end').value;
+  const isEvent    = document.getElementById('f-event-range-group').style.display !== 'none';
 
   if (!date)   { showToast('⚠️ กรุณาเลือกวันที่', true); return; }
   if (!amount) { showToast('⚠️ กรุณากรอกจำนวนเงิน', true); return; }
-  if (sub==='จาก MKT Event' && (!eventStart||!eventEnd)) { showToast('⚠️ กรุณาเลือกระยะเวลา Event', true); return; }
-  if (sub==='จาก MKT Event' && eventEnd<eventStart) { showToast('⚠️ วันสิ้นสุดต้องหลังวันเริ่มต้น', true); return; }
+  if (isEvent && (!eventStart||!eventEnd)) { showToast('⚠️ กรุณาเลือกระยะเวลา Event', true); return; }
+  if (isEvent && eventEnd<eventStart) { showToast('⚠️ วันสิ้นสุดต้องหลังวันเริ่มต้น', true); return; }
 
   if (!currentUser) { changeUser(); showToast('⚠️ กรุณาเลือกชื่อผู้ใช้ก่อน', true); return; }
 
   if (campaign) saveCampaignName(campaign);
 
-  const entry = { date, type:currentType, cat, sub, desc, amount, note, campaign, eventStart, eventEnd };
+  const entry = { date, type:currentType, group, cat, branch, account, vendor, desc, amount, note, campaign, eventStart:isEvent?eventStart:'', eventEnd:isEvent?eventEnd:'' };
   const id = editId || uid();
   if (editId) {
     const orig = appData.find(e => e.id === editId);
@@ -796,8 +859,7 @@ function saveEntry() {
   entriesRef.child(id).set(entry)
     .then(() => {
       closeModal();
-      const info = catInfo(currentType, cat);
-      showToast('✅ บันทึก ' + (info?.label||'') + ' ฿' + fmt(amount));
+      showToast('✅ บันทึก ' + (isCost?groupLabel(group):revChannel({cat})) + ' ฿' + fmt(amount));
     })
     .catch(err => { showToast('❌ ' + err.message, true); })
     .finally(() => { btn.textContent = '💾 บันทึก'; btn.disabled = false; });
@@ -817,120 +879,148 @@ function deleteEntry(id) {
 //  DASHBOARD
 // ═══════════════════════════════════════════
 let donutChart=null, barChart=null, selectedMonth='';
+let selectedGroup='all';   // 'all' = all costs, 'revenue' = income, or a COST_GROUPS key
+let selectedBranch='all';  // 'all' | 'b1' | 'b2'
+
+function renderGroupPills() {
+  const el = document.getElementById('group-pills'); if (!el) return; el.innerHTML='';
+  const opts = [['all','💰 ต้นทุนทั้งหมด'], ...Object.entries(COST_GROUPS).map(([k,v])=>[k,v.label]), ['revenue','📈 รายรับ']];
+  opts.forEach(([k,label]) => {
+    const b=document.createElement('button'); b.className='pill'+(selectedGroup===k?' sel':''); b.textContent=label;
+    b.onclick=()=>{ selectedGroup=k; renderDashboard(); }; el.appendChild(b);
+  });
+}
+function renderBranchPills() {
+  const el = document.getElementById('branch-pills'); if (!el) return; el.innerHTML='';
+  [['all','ทุกสาขา'],['b1','สาขา 1'],['b2','สาขา 2']].forEach(([k,label]) => {
+    const b=document.createElement('button'); b.className='pill'+(selectedBranch===k?' sel':''); b.textContent=label;
+    b.onclick=()=>{ selectedBranch=k; renderDashboard(); }; el.appendChild(b);
+  });
+}
 
 function renderDashboard() {
   const months = [...new Set(appData.map(e => monthOf(e.date)))].filter(Boolean).sort();
-  const pillsEl = document.getElementById('month-pills');
-  pillsEl.innerHTML = '';
+  renderGroupPills(); renderBranchPills();
 
-  if (!months.length) {
+  if (!appData.length) {
     document.getElementById('dash-empty').style.display='block';
     document.getElementById('dash-content').style.display='none';
+    document.getElementById('month-pills').innerHTML='';
     return;
   }
   document.getElementById('dash-empty').style.display='none';
   document.getElementById('dash-content').style.display='block';
 
-  const YEAR = '__YEAR__';
-  const years = [...new Set(months.map(m => m.slice(0,4)))];
-  // default = whole-year overview; reset to it if a stale month is selected
-  if (selectedMonth !== YEAR && !months.includes(selectedMonth)) selectedMonth = YEAR;
+  const YEAR='__YEAR__';
+  const years=[...new Set(months.map(m=>m.slice(0,4)))];
 
-  // "ทั้งปี" overview pill (first)
-  const yp = document.createElement('button');
-  yp.className = 'pill'+(selectedMonth===YEAR?' sel':'');
-  yp.textContent = '📅 ทั้งปี'+(years.length===1?' '+thYear(years[0]):'');
-  yp.onclick = () => { selectedMonth=YEAR; renderDashboard(); };
+  // month pills
+  const pillsEl=document.getElementById('month-pills'); pillsEl.innerHTML='';
+  if (selectedMonth!==YEAR && !months.includes(selectedMonth)) selectedMonth=YEAR;
+  const yp=document.createElement('button');
+  yp.className='pill'+(selectedMonth===YEAR?' sel':'');
+  yp.textContent='📅 ทั้งปี'+(years.length===1?' '+thYear(years[0]):'');
+  yp.onclick=()=>{selectedMonth=YEAR;renderDashboard();};
   pillsEl.appendChild(yp);
+  months.forEach(m=>{ const p=document.createElement('button'); p.className='pill'+(m===selectedMonth?' sel':''); p.textContent=thMonth(m); p.onclick=()=>{selectedMonth=m;renderDashboard();}; pillsEl.appendChild(p); });
 
-  months.forEach(m => {
-    const p = document.createElement('button');
-    p.className = 'pill'+(m===selectedMonth?' sel':'');
-    p.textContent = thMonth(m);
-    p.onclick = () => { selectedMonth=m; renderDashboard(); };
-    pillsEl.appendChild(p);
-  });
+  const isYear=selectedMonth===YEAR;
+  const periodLabel=isYear?('ทั้งปี'+(years.length===1?' '+thYear(years[0]):'')):thMonth(selectedMonth);
 
-  const isYear = selectedMonth === YEAR;
-  const periodLabel = isYear ? ('ทั้งปี'+(years.length===1?' '+thYear(years[0]):'')) : thMonth(selectedMonth);
-  const mData  = isYear ? appData.slice() : appData.filter(e => monthOf(e.date)===selectedMonth);
-  const costs  = mData.filter(e => e.type==='cost');
-  const revs   = mData.filter(e => e.type==='revenue');
-  const totalCost = costs.reduce((s,e)=>s+e.amount,0);
-  const totalRev  = revs.reduce((s,e)=>s+e.amount,0);
-  const mktPct = totalRev ? (totalCost/totalRev*100) : 0;
-  const pctClass = mktPct<=20?'col-green':mktPct<=30?'col-orange':'col-red';
-  const pctNote  = mktPct<=20?'✅ อยู่ในเกณฑ์ดี':mktPct<=30?'⚠️ ใกล้เกินงบ':'🔴 เกินเกณฑ์แนะนำ';
+  // filter by month + branch
+  let base=appData.slice();
+  if (!isYear) base=base.filter(e=>monthOf(e.date)===selectedMonth);
+  if (selectedBranch!=='all') base=base.filter(e=>(e.branch||'b1')===selectedBranch);
 
-  const catTotals = {};
-  costs.forEach(e => { catTotals[e.cat]=(catTotals[e.cat]||0)+e.amount; });
-  const topCat = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0];
+  const isRevView=selectedGroup==='revenue';
+  const viewType=isRevView?'revenue':'cost';
+  let view=base.filter(e=>e.type===viewType);
+  if (!isRevView && selectedGroup!=='all') view=view.filter(e=>costGroup(e)===selectedGroup);
 
-  document.getElementById('kpi-row').innerHTML = `
-    <div class="kpi"><div class="kpi-label">ยอดขายรวม</div><div class="kpi-val col-green">฿${fmt(totalRev)}</div><div class="kpi-sub">${periodLabel}</div></div>
-    <div class="kpi"><div class="kpi-label">Marketing รวม</div><div class="kpi-val col-red">฿${fmt(totalCost)}</div><div class="kpi-sub">${costs.length} รายการ</div></div>
-    <div class="kpi"><div class="kpi-label">% Marketing / ยอดขาย</div><div class="kpi-val ${pctClass}">${mktPct.toFixed(1)}%</div><div class="kpi-sub">${pctNote}</div></div>
-    <div class="kpi"><div class="kpi-label">หมวดใช้เงินสูงสุด</div><div class="kpi-val" style="font-size:15px">${topCat?(COST_CATS[topCat[0]]?.label||topCat[0]):'—'}</div><div class="kpi-sub">${topCat?'฿'+fmt(topCat[1]):''}</div></div>`;
+  const total=view.reduce((s,e)=>s+e.amount,0);
+  const totalRevAll=base.filter(e=>e.type==='revenue').reduce((s,e)=>s+e.amount,0);
+  const totalCostAll=base.filter(e=>e.type==='cost').reduce((s,e)=>s+e.amount,0);
 
-  const donutData = Object.entries(COST_CATS).map(([k,v])=>({label:v.label,val:catTotals[k]||0,color:v.color})).filter(d=>d.val>0);
+  const keyOf = e => isRevView ? revChannel(e) : (selectedGroup==='all' ? costGroup(e) : costSubLabel(e));
+  const labelOf = k => (isRevView || selectedGroup!=='all') ? k : groupLabel(k);
+  const colorOf = (k,i) => (isRevView || selectedGroup!=='all') ? PALETTE[i%PALETTE.length] : groupColor(k);
+
+  const totals={}; view.forEach(e=>{ const k=keyOf(e); totals[k]=(totals[k]||0)+e.amount; });
+  const sorted=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+  const topEntry=sorted[0];
+
+  // titles
+  const viewName=isRevView?'รายรับ':(selectedGroup==='all'?'ต้นทุนทั้งหมด':groupLabel(selectedGroup));
+  document.getElementById('donut-title').textContent=isRevView?'สัดส่วนรายรับ (ช่องทาง)':(selectedGroup==='all'?'สัดส่วนต้นทุน (แยกหมวด)':'สัดส่วน '+groupLabel(selectedGroup));
+  document.getElementById('cat-table-title').textContent=isRevView?'รายละเอียดแต่ละช่องทาง':(selectedGroup==='all'?'รายละเอียดแต่ละหมวดต้นทุน':'รายละเอียด '+groupLabel(selectedGroup));
+  document.getElementById('cat-col-1').textContent=isRevView?'ช่องทาง':(selectedGroup==='all'?'หมวดต้นทุน':'ประเภทย่อย');
+
+  // KPIs
+  let kpi='';
+  if (isRevView) {
+    kpi=`
+      <div class="kpi"><div class="kpi-label">รายรับรวม</div><div class="kpi-val col-green">฿${fmt(total)}</div><div class="kpi-sub">${periodLabel}</div></div>
+      <div class="kpi"><div class="kpi-label">จำนวนรายการ</div><div class="kpi-val">${view.length}</div><div class="kpi-sub">รายการรายรับ</div></div>
+      <div class="kpi"><div class="kpi-label">ช่องทางสูงสุด</div><div class="kpi-val" style="font-size:15px">${topEntry?esc(topEntry[0]):'—'}</div><div class="kpi-sub">${topEntry?'฿'+fmt(topEntry[1]):''}</div></div>
+      <div class="kpi"><div class="kpi-label">ต้นทุนรวม (ทุกหมวด)</div><div class="kpi-val col-red">฿${fmt(totalCostAll)}</div><div class="kpi-sub">ช่วงเดียวกัน</div></div>`;
+  } else {
+    const pct=totalRevAll?(total/totalRevAll*100):0;
+    kpi=`
+      <div class="kpi"><div class="kpi-label">${esc(viewName)} รวม</div><div class="kpi-val col-red">฿${fmt(total)}</div><div class="kpi-sub">${periodLabel}</div></div>
+      <div class="kpi"><div class="kpi-label">จำนวนรายการ</div><div class="kpi-val">${view.length}</div><div class="kpi-sub">รายการ</div></div>
+      <div class="kpi"><div class="kpi-label">% ของยอดขาย</div><div class="kpi-val">${pct.toFixed(1)}%</div><div class="kpi-sub">ยอดขาย ฿${fmt(totalRevAll)}</div></div>
+      <div class="kpi"><div class="kpi-label">${selectedGroup==='all'?'หมวดสูงสุด':'ประเภทสูงสุด'}</div><div class="kpi-val" style="font-size:15px">${topEntry?esc(labelOf(topEntry[0])):'—'}</div><div class="kpi-sub">${topEntry?'฿'+fmt(topEntry[1]):''}</div></div>`;
+  }
+  document.getElementById('kpi-row').innerHTML=kpi;
+
+  // donut
+  const donutData=sorted.map(([k,v],i)=>({label:labelOf(k),val:v,color:colorOf(k,i)})).filter(d=>d.val>0);
   if (donutChart){donutChart.destroy();donutChart=null;}
-  donutChart = new Chart(document.getElementById('cDonut').getContext('2d'),{
+  donutChart=new Chart(document.getElementById('cDonut').getContext('2d'),{
     type:'doughnut',
     data:{labels:donutData.map(d=>d.label),datasets:[{data:donutData.map(d=>d.val),backgroundColor:donutData.map(d=>d.color),borderWidth:2,borderColor:'#fff'}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
       plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:8}},
-        tooltip:{callbacks:{label:c=>` ฿${fmt(c.raw)} (${totalCost?(c.raw/totalCost*100).toFixed(1):0}%)`}}}}
+        tooltip:{callbacks:{label:c=>` ฿${fmt(c.raw)} (${total?(c.raw/total*100).toFixed(1):0}%)`}}}}
   });
 
-  const barTitle = document.getElementById('bar-title');
+  // trend bar
+  const matchView = (e,m) => monthOf(e.date)===m && e.type===viewType
+    && (selectedBranch==='all' || (e.branch||'b1')===selectedBranch)
+    && (isRevView || selectedGroup==='all' || costGroup(e)===selectedGroup);
+  const barTitle=document.getElementById('bar-title');
   if (barChart){barChart.destroy();barChart=null;}
-  const barCtx = document.getElementById('cBar').getContext('2d');
-
+  const barCtx=document.getElementById('cBar').getContext('2d');
+  const barColor=isRevView?'#2d7a4f':(selectedGroup==='all'?'#ef4444':groupColor(selectedGroup));
   if (isYear) {
-    // Whole-year view: 6-month revenue vs marketing trend
-    if (barTitle) barTitle.textContent = 'แนวโน้ม 6 เดือน';
-    const last6 = months.slice(-6);
-    const barRev = last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='revenue').reduce((s,e)=>s+e.amount,0));
-    const barCost= last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='cost').reduce((s,e)=>s+e.amount,0));
-    barChart = new Chart(barCtx,{
-      type:'bar',
-      data:{labels:last6.map(thMonth),datasets:[
-        {label:'ยอดขาย',data:barRev,backgroundColor:'rgba(45,122,79,.15)',borderColor:'#2d7a4f',borderWidth:2,borderRadius:4},
-        {label:'Marketing',data:barCost,backgroundColor:'rgba(239,68,68,.15)',borderColor:'#ef4444',borderWidth:2,borderRadius:4}
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10}}},
-        scales:{y:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
+    if (barTitle) barTitle.textContent='แนวโน้ม 6 เดือน — '+viewName;
+    const last6=months.slice(-6);
+    const data=last6.map(m=>appData.filter(e=>matchView(e,m)).reduce((s,e)=>s+e.amount,0));
+    barChart=new Chart(barCtx,{type:'bar',
+      data:{labels:last6.map(thMonth),datasets:[{label:viewName,data,backgroundColor:barColor+'26',borderColor:barColor,borderWidth:2,borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
     });
   } else {
-    // Single-month view: last 3 months, marketing cost stacked by category
-    if (barTitle) barTitle.textContent = 'แนวโน้ม 3 เดือน (แยกหมวด)';
-    const idx = months.indexOf(selectedMonth);
-    const last3 = months.slice(Math.max(0, idx-2), idx+1);
-    const datasets = Object.entries(COST_CATS).map(([k,v]) => ({
-      label: v.label,
-      data: last3.map(m => appData.filter(e=>monthOf(e.date)===m && e.type==='cost' && e.cat===k).reduce((s,e)=>s+e.amount,0)),
-      backgroundColor: v.color,
-      borderWidth: 0,
-      borderRadius: 3,
-      stack: 'cost'
-    })).filter(ds => ds.data.some(x => x>0));
-    barChart = new Chart(barCtx,{
-      type:'bar',
-      data:{labels:last3.map(thMonth), datasets},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},
-          tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ฿${fmt(c.raw)}`}}},
-        scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
+    if (barTitle) barTitle.textContent='แนวโน้ม 3 เดือน (แยกประเภท) — '+viewName;
+    const idx=months.indexOf(selectedMonth);
+    const last3=months.slice(Math.max(0,idx-2),idx+1);
+    const keys=sorted.map(s=>s[0]);
+    const datasets=keys.map((k,i)=>({
+      label:labelOf(k),
+      data:last3.map(m=>appData.filter(e=>matchView(e,m)&&keyOf(e)===k).reduce((s,e)=>s+e.amount,0)),
+      backgroundColor:colorOf(k,i),borderWidth:0,borderRadius:3,stack:'v'
+    })).filter(ds=>ds.data.some(x=>x>0));
+    barChart=new Chart(barCtx,{type:'bar',data:{labels:last3.map(thMonth),datasets},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ฿${fmt(c.raw)}`}}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
     });
   }
 
-  document.getElementById('cat-body').innerHTML = Object.entries(COST_CATS).map(([k,v])=>{
-    const val=catTotals[k]||0;const p=totalCost?(val/totalCost*100):0;
-    return `<tr><td><span class="dot" style="background:${v.color}"></span>${v.label}</td><td><strong>฿${fmt(val)}</strong></td>
-      <td>${p.toFixed(1)}%<div class="pbar"><div class="pfill" style="width:${p}%;background:${v.color}"></div></div></td>
-      <td><span class="badge b-good" style="background:${v.color}1a;color:${v.color}">${v.target}</span></td></tr>`;
-  }).join('');
+  // breakdown table
+  document.getElementById('cat-body').innerHTML = sorted.map(([k,v],i)=>{
+    const p=total?(v/total*100):0; const color=colorOf(k,i);
+    return `<tr><td><span class="dot" style="background:${color}"></span>${esc(labelOf(k))}</td><td><strong>฿${fmt(v)}</strong></td>
+      <td>${p.toFixed(1)}%<div class="pbar"><div class="pfill" style="width:${p}%;background:${color}"></div></div></td></tr>`;
+  }).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted)">ไม่มีข้อมูลในมุมมองนี้</td></tr>';
 }
 
 // ═══════════════════════════════════════════
@@ -946,18 +1036,21 @@ function renderLog() {
   const fc = document.getElementById('filter-cat');
   const curc = fc.value;
   fc.innerHTML = '<option value="">ทุกหมวด</option>' +
-    Object.entries(COST_CATS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('') +
-    Object.entries(REV_CATS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+    Object.entries(COST_GROUPS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('') +
+    '<option value="__rev__">📈 รายรับ</option>';
   if (curc) fc.value = curc;
 
-  const fMonth = document.getElementById('filter-month').value;
-  const fType  = document.getElementById('filter-type').value;
-  const fCat   = document.getElementById('filter-cat').value;
+  const fMonth  = document.getElementById('filter-month').value;
+  const fType   = document.getElementById('filter-type').value;
+  const fCat    = document.getElementById('filter-cat').value;
+  const fBranch = document.getElementById('filter-branch').value;
 
   let rows = [...appData];
   if (fMonth) rows=rows.filter(e=>monthOf(e.date)===fMonth);
   if (fType)  rows=rows.filter(e=>e.type===fType);
-  if (fCat)   rows=rows.filter(e=>e.cat===fCat);
+  if (fCat==='__rev__') rows=rows.filter(e=>e.type==='revenue');
+  else if (fCat) rows=rows.filter(e=>e.type==='cost' && costGroup(e)===fCat);
+  if (fBranch) rows=rows.filter(e=>(e.branch||'b1')===fBranch);
 
   const empty = document.getElementById('log-empty');
   const table = document.getElementById('log-table');
@@ -965,20 +1058,23 @@ function renderLog() {
   empty.style.display='none';table.style.display='table';
 
   document.getElementById('log-body').innerHTML = rows.map(e=>{
-    const info = catInfo(e.type,e.cat);
-    const color = info?.color||'#9ca3af';
     const isRev = e.type==='revenue';
-    const extraTags = [
+    const color = isRev ? '#2d7a4f' : groupColor(costGroup(e));
+    const mainLabel = isRev ? revChannel(e) : groupLabel(costGroup(e));
+    const subLabel  = isRev ? '' : costSubLabel(e);
+    const tags = [
+      e.branch ? `<span style="font-size:11px;background:#f1f5f9;color:#475569;padding:1px 7px;border-radius:10px;font-weight:600">🏠 ${esc(branchLabel(e.branch))}</span>` : '',
+      e.vendor ? `<span style="font-size:11px;background:#fefce8;color:#a16207;padding:1px 7px;border-radius:10px">🏬 ${esc(e.vendor)}</span>` : '',
+      e.account ? `<span style="font-size:11px;color:var(--muted)">💳 ${esc(accountLabel(e.account))}</span>` : '',
       e.campaign ? `<span style="font-size:11px;background:#fdf4ff;color:#7c3aed;padding:1px 7px;border-radius:10px;font-weight:600">📌 ${esc(e.campaign)}</span>` : '',
-      e.eventStart ? `<span style="font-size:11px;background:#fff0f9;color:#be185d;padding:1px 7px;border-radius:10px;font-weight:500">📅 ${thDate(e.eventStart)}${e.eventEnd&&e.eventEnd!==e.eventStart?' – '+thDate(e.eventEnd):''}</span>` : '',
       e.note ? `<span style="font-size:11px;color:var(--muted)">${esc(e.note)}</span>` : '',
       e.createdBy ? `<span style="font-size:11px;background:#eef2ff;color:#4338ca;padding:1px 7px;border-radius:10px;font-weight:600">👤 ${esc(e.createdBy)}</span>` : '',
     ].filter(Boolean).join(' ');
     return `<tr class="${isRev?'rev-row':''}">
       <td style="white-space:nowrap">${thDate(e.date)}</td>
       <td><span class="badge ${isRev?'b-rev':'b-cost'}">${isRev?'รายรับ':'ค่าใช้จ่าย'}</span></td>
-      <td><span class="cat-pill" style="background:${color}1a;color:${color}">${info?.label||esc(e.cat)}</span><br><span style="font-size:11px;color:var(--muted)">${esc(e.sub||'')}</span></td>
-      <td>${esc(e.desc||'—')}${extraTags?'<br>'+extraTags:''}</td>
+      <td><span class="cat-pill" style="background:${color}1a;color:${color}">${esc(mainLabel)}</span>${subLabel?'<br><span style="font-size:11px;color:var(--muted)">'+esc(subLabel)+'</span>':''}</td>
+      <td>${esc(e.desc||'—')}${tags?'<br>'+tags:''}</td>
       <td style="font-weight:700;color:${isRev?'var(--green)':'var(--red)'}">฿${fmt(e.amount)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="openModal('${e.id}')">✏️</button>
@@ -1025,12 +1121,11 @@ function renderCampaigns() {
     const safeId    = name.replace(/[^a-zA-Z0-9]/g,'_');
 
     const entriesHtml = allEntries.map(e => {
-      const info = catInfo(e.type, e.cat);
       const isRev = e.type==='revenue';
       return `<tr class="${isRev?'rev-row':''}">
         <td style="white-space:nowrap;font-size:12px">${thDate(e.date)}</td>
         <td><span class="badge ${isRev?'b-rev':'b-cost'}" style="font-size:10px">${isRev?'รายรับ':'รายจ่าย'}</span></td>
-        <td style="font-size:12px">${info?.label||esc(e.cat)}</td>
+        <td style="font-size:12px">${esc(isRev?revChannel(e):groupLabel(costGroup(e)))}</td>
         <td style="font-size:12px">${esc(e.desc||'—')}</td>
         <td style="font-weight:700;font-size:13px;color:${isRev?'var(--green)':'var(--red)'}">฿${fmt(e.amount)}</td>
       </tr>`;
@@ -1091,10 +1186,11 @@ function openModalForCampaign(campName) {
 
 function exportCSV() {
   if (!appData.length){showToast('⚠️ ไม่มีข้อมูล',true);return;}
-  const rows=[['วันที่','ประเภท','หมวด','หมวดย่อย','Campaign','Event Start','Event End','รายละเอียด','จำนวน (฿)','Note','ผู้บันทึก']];
+  const clean = s => (s||'').toString().replace(/,/g,' ');
+  const rows=[['วันที่','ประเภท','กลุ่ม/ช่องทาง','ประเภทย่อย','สาขา','บัญชีที่จ่าย','ผู้รับ/ร้านค้า','Campaign','รายละเอียด','จำนวน (฿)','Note','ผู้บันทึก']];
   appData.forEach(e=>{
-    const info=catInfo(e.type,e.cat);
-    rows.push([e.date,e.type==='cost'?'ค่าใช้จ่าย':'รายรับ',info?.label||e.cat,e.sub||'',(e.campaign||'').replace(/,/g,' '),e.eventStart||'',e.eventEnd||'',(e.desc||'').replace(/,/g,' '),e.amount,(e.note||'').replace(/,/g,' '),(e.createdBy||'').replace(/,/g,' ')]);
+    const isRev=e.type==='revenue';
+    rows.push([e.date, isRev?'รายรับ':'ค่าใช้จ่าย', clean(isRev?revChannel(e):groupLabel(costGroup(e))), clean(isRev?'':costSubLabel(e)), clean(branchLabel(e.branch)), clean(accountLabel(e.account)), clean(e.vendor), clean(e.campaign), clean(e.desc), e.amount, clean(e.note), clean(e.createdBy)]);
   });
   const csv='﻿'+rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');
