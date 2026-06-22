@@ -1119,15 +1119,41 @@ function renderDashboard() {
         <li>จำนวนรายการต้นทุนทั้งหมด: <strong>${view.length}</strong> รายการ</li>
       </ul></div>`;
   } else {
+    // ── per-group highlights ──
+    const avg=view.length?total/view.length:0;
+    const maxItem=[...view].sort((a,b)=>b.amount-a.amount)[0];
+    const subT={}; view.forEach(e=>{ const k=isRevView?revChannel(e):costSubLabel(e); subT[k]=(subT[k]||0)+e.amount; });
+    const topSub=Object.entries(subT).sort((a,b)=>b[1]-a[1])[0];
+    let hi='';
+    if (isRevView) {
+      hi=`
+        <div class="kpi"><div class="kpi-label">ช่องทางขายดีสุด</div><div class="kpi-val" style="font-size:15px">${topSub?esc(topSub[0]):'—'}</div><div class="kpi-sub">${topSub?'฿'+fmt(topSub[1]):''}</div></div>
+        <div class="kpi"><div class="kpi-label">รายการสูงสุด</div><div class="kpi-val col-green">${maxItem?'฿'+fmt(maxItem.amount):'—'}</div><div class="kpi-sub">${maxItem?esc(revChannel(maxItem)):''}</div></div>
+        <div class="kpi"><div class="kpi-label">เฉลี่ยต่อรายการ</div><div class="kpi-val" style="font-size:16px">฿${fmt(Math.round(avg))}</div><div class="kpi-sub">${view.length} รายการ</div></div>`;
+    } else {
+      const vCount={}, vTotal={};
+      view.forEach(e=>{ const v=(e.vendor||'').trim(); if(!v) return; vCount[v]=(vCount[v]||0)+1; vTotal[v]=(vTotal[v]||0)+e.amount; });
+      const topFreq=Object.entries(vCount).sort((a,b)=>b[1]-a[1])[0];
+      const topSpend=Object.entries(vTotal).sort((a,b)=>b[1]-a[1])[0];
+      hi=`
+        <div class="kpi"><div class="kpi-label">🔁 สั่งบ่อยสุด (ร้าน)</div><div class="kpi-val" style="font-size:15px">${topFreq?esc(topFreq[0]):'—'}</div><div class="kpi-sub">${topFreq?topFreq[1]+' ครั้ง':'ไม่มีข้อมูลร้านค้า'}</div></div>
+        <div class="kpi"><div class="kpi-label">💰 จ่ายให้มากสุด (ร้าน)</div><div class="kpi-val" style="font-size:15px">${topSpend?esc(topSpend[0]):'—'}</div><div class="kpi-sub">${topSpend?'฿'+fmt(topSpend[1]):''}</div></div>
+        <div class="kpi"><div class="kpi-label">🔥 รายการแพงสุด</div><div class="kpi-val col-red">${maxItem?'฿'+fmt(maxItem.amount):'—'}</div><div class="kpi-sub">${maxItem?esc((maxItem.desc||'').slice(0,28)||'—'):''}</div></div>
+        <div class="kpi"><div class="kpi-label">📊 ประเภทย่อยเด่น</div><div class="kpi-val" style="font-size:15px">${topSub&&topSub[0]?esc(topSub[0]):'—'}</div><div class="kpi-sub">${topSub?'฿'+fmt(topSub[1])+' · เฉลี่ย/รายการ ฿'+fmt(Math.round(avg)):''}</div></div>`;
+    }
+    const hiCard=`<div class="card"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📌 สรุปประเด็น — ${esc(viewName)}</div><div class="kpi-row">${hi}</div></div>`;
+
+    // ── detail list ──
     const rows=[...view].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const colHead=isRevView?'<th>วันที่</th><th>ช่องทาง</th><th>สาขา</th><th style="text-align:right">จำนวน</th>':'<th>วันที่</th><th>รายละเอียด</th><th>ผู้รับ/ร้านค้า</th><th>สาขา</th><th style="text-align:right">จำนวน</th>';
     const body=rows.slice(0,500).map(e=>{
       if(isRevView) return `<tr><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(revChannel(e))}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--green)">฿${fmt(e.amount)}</td></tr>`;
       return `<tr><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(e.desc||'—')}${e.cat?'<br><span style="font-size:11px;color:var(--muted)">'+esc(e.cat)+'</span>':''}</td><td>${esc(e.vendor||'—')}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--red)">฿${fmt(e.amount)}</td></tr>`;
     }).join('');
-    extra.innerHTML=`<div class="card" style="overflow-x:auto"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📋 รายการละเอียด — ${esc(viewName)} (${rows.length} รายการ)</div>
+    const detailCard=`<div class="card" style="overflow-x:auto"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📋 รายการละเอียด — ${esc(viewName)} (${rows.length} รายการ)</div>
       <table class="tbl"><thead><tr>${colHead}</tr></thead><tbody>${body||'<tr><td colspan="5" style="text-align:center;color:var(--muted)">ไม่มีรายการ</td></tr>'}</tbody></table>
       ${rows.length>500?`<div style="font-size:12px;color:var(--muted);text-align:center;margin-top:8px">แสดง 500 รายการแรกจาก ${rows.length}</div>`:''}</div>`;
+    extra.innerHTML=hiCard+detailCard;
   }
 }
 
