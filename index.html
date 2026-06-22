@@ -1015,7 +1015,11 @@ function renderDashboard() {
   const totalRevAll=base.filter(e=>e.type==='revenue').reduce((s,e)=>s+e.amount,0);
   const totalCostAll=base.filter(e=>e.type==='cost'&&costGroup(e)!=='marketing').reduce((s,e)=>s+e.amount,0);
 
-  const keyOf = e => isRevView ? revChannel(e) : (selectedGroup==='all' ? costGroup(e) : costSubLabel(e));
+  const keyOf = e => {
+    if (isRevView) return revChannel(e);
+    if (selectedGroup==='all') return costGroup(e);
+    return (e.vendor||'').trim() || costSubLabel(e) || '(ไม่ระบุร้าน)';
+  };
   const labelOf = k => (isRevView || selectedGroup!=='all') ? k : groupLabel(k);
   const colorOf = (k,i) => (isRevView || selectedGroup!=='all') ? PALETTE[i%PALETTE.length] : groupColor(k);
 
@@ -1025,9 +1029,9 @@ function renderDashboard() {
 
   // titles
   const viewName=isRevView?'รายรับ':(selectedGroup==='all'?'ต้นทุนทั้งหมด':groupLabel(selectedGroup));
-  document.getElementById('donut-title').textContent=isRevView?'สัดส่วนรายรับ (ช่องทาง)':(selectedGroup==='all'?'สัดส่วนต้นทุน (แยกหมวด)':'สัดส่วน '+groupLabel(selectedGroup));
-  document.getElementById('cat-table-title').textContent=isRevView?'รายละเอียดแต่ละช่องทาง':(selectedGroup==='all'?'รายละเอียดแต่ละหมวดต้นทุน':'รายละเอียด '+groupLabel(selectedGroup));
-  document.getElementById('cat-col-1').textContent=isRevView?'ช่องทาง':(selectedGroup==='all'?'หมวดต้นทุน':'ประเภทย่อย');
+  document.getElementById('donut-title').textContent=isRevView?'สัดส่วนรายรับ (ช่องทาง)':(selectedGroup==='all'?'สัดส่วนต้นทุน (แยกหมวด)':'สัดส่วน '+groupLabel(selectedGroup)+' (ตามร้านค้า)');
+  document.getElementById('cat-table-title').textContent=isRevView?'รายละเอียดแต่ละช่องทาง':(selectedGroup==='all'?'รายละเอียดแต่ละหมวดต้นทุน':'สัดส่วน '+groupLabel(selectedGroup)+' (ตามร้านค้า)');
+  document.getElementById('cat-col-1').textContent=isRevView?'ช่องทาง':(selectedGroup==='all'?'หมวดต้นทุน':'ร้านค้า/ผู้รับ');
 
   // KPIs
   let kpi='';
@@ -1047,8 +1051,14 @@ function renderDashboard() {
   }
   document.getElementById('kpi-row').innerHTML=kpi;
 
-  // donut
-  const donutData=sorted.map(([k,v],i)=>({label:labelOf(k),val:v,color:colorOf(k,i)})).filter(d=>d.val>0);
+  // donut (cap to top 12 slices + "อื่นๆ" to stay readable)
+  let donutData=sorted.map(([k,v],i)=>({label:labelOf(k),val:v,color:colorOf(k,i)})).filter(d=>d.val>0);
+  if (donutData.length>12) {
+    const head=donutData.slice(0,12);
+    const rest=donutData.slice(12).reduce((s,d)=>s+d.val,0);
+    if (rest>0) head.push({label:'อื่นๆ',val:rest,color:'#cbd5e1'});
+    donutData=head;
+  }
   if (donutChart){donutChart.destroy();donutChart=null;}
   donutChart=new Chart(document.getElementById('cDonut').getContext('2d'),{
     type:'doughnut',
@@ -1078,13 +1088,19 @@ function renderDashboard() {
     if (barTitle) barTitle.textContent='แนวโน้ม 3 เดือน (แยกประเภท) — '+viewName;
     const idx=months.indexOf(selectedMonth);
     const last3=months.slice(Math.max(0,idx-2),idx+1);
-    const keys=sorted.map(s=>s[0]);
-    const datasets=keys.map((k,i)=>({
+    const topKeys=sorted.slice(0,8).map(s=>s[0]);
+    const otherKeys=sorted.slice(8).map(s=>s[0]);
+    const datasets=topKeys.map((k,i)=>({
       label:labelOf(k),
       data:last3.map(m=>appData.filter(e=>matchView(e,m)&&keyOf(e)===k).reduce((s,e)=>s+e.amount,0)),
       backgroundColor:colorOf(k,i),borderWidth:0,borderRadius:3,stack:'v'
-    })).filter(ds=>ds.data.some(x=>x>0));
-    barChart=new Chart(barCtx,{type:'bar',data:{labels:last3.map(thMonth),datasets},
+    }));
+    if (otherKeys.length) {
+      const os=new Set(otherKeys);
+      datasets.push({label:'อื่นๆ', data:last3.map(m=>appData.filter(e=>matchView(e,m)&&os.has(keyOf(e))).reduce((s,e)=>s+e.amount,0)), backgroundColor:'#cbd5e1',borderWidth:0,borderRadius:3,stack:'v'});
+    }
+    const cleanDs=datasets.filter(ds=>ds.data.some(x=>x>0));
+    barChart=new Chart(barCtx,{type:'bar',data:{labels:last3.map(thMonth),datasets:cleanDs},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ฿${fmt(c.raw)}`}}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
     });
   }
