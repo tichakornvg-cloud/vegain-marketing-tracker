@@ -263,7 +263,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
       <div class="kpi-row" id="kpi-row"></div>
       <div class="chart-row">
         <div class="chart-card"><h3>สัดส่วนค่าใช้จ่าย Marketing</h3><div class="chart-wrap"><canvas id="cDonut"></canvas></div></div>
-        <div class="chart-card"><h3>แนวโน้ม 6 เดือน</h3><div class="chart-wrap"><canvas id="cBar"></canvas></div></div>
+        <div class="chart-card"><h3 id="bar-title">แนวโน้ม 6 เดือน</h3><div class="chart-wrap"><canvas id="cBar"></canvas></div></div>
       </div>
       <div class="card">
         <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">รายละเอียดแต่ละหมวด</div>
@@ -882,20 +882,48 @@ function renderDashboard() {
         tooltip:{callbacks:{label:c=>` ฿${fmt(c.raw)} (${totalCost?(c.raw/totalCost*100).toFixed(1):0}%)`}}}}
   });
 
-  const last6 = months.slice(-6);
-  const barRev = last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='revenue').reduce((s,e)=>s+e.amount,0));
-  const barCost= last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='cost').reduce((s,e)=>s+e.amount,0));
+  const barTitle = document.getElementById('bar-title');
   if (barChart){barChart.destroy();barChart=null;}
-  barChart = new Chart(document.getElementById('cBar').getContext('2d'),{
-    type:'bar',
-    data:{labels:last6.map(thMonth),datasets:[
-      {label:'ยอดขาย',data:barRev,backgroundColor:'rgba(45,122,79,.15)',borderColor:'#2d7a4f',borderWidth:2,borderRadius:4},
-      {label:'Marketing',data:barCost,backgroundColor:'rgba(239,68,68,.15)',borderColor:'#ef4444',borderWidth:2,borderRadius:4}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10}}},
-      scales:{y:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
-  });
+  const barCtx = document.getElementById('cBar').getContext('2d');
+
+  if (isYear) {
+    // Whole-year view: 6-month revenue vs marketing trend
+    if (barTitle) barTitle.textContent = 'แนวโน้ม 6 เดือน';
+    const last6 = months.slice(-6);
+    const barRev = last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='revenue').reduce((s,e)=>s+e.amount,0));
+    const barCost= last6.map(m=>appData.filter(e=>monthOf(e.date)===m&&e.type==='cost').reduce((s,e)=>s+e.amount,0));
+    barChart = new Chart(barCtx,{
+      type:'bar',
+      data:{labels:last6.map(thMonth),datasets:[
+        {label:'ยอดขาย',data:barRev,backgroundColor:'rgba(45,122,79,.15)',borderColor:'#2d7a4f',borderWidth:2,borderRadius:4},
+        {label:'Marketing',data:barCost,backgroundColor:'rgba(239,68,68,.15)',borderColor:'#ef4444',borderWidth:2,borderRadius:4}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10}}},
+        scales:{y:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
+    });
+  } else {
+    // Single-month view: last 3 months, marketing cost stacked by category
+    if (barTitle) barTitle.textContent = 'แนวโน้ม 3 เดือน (แยกหมวด)';
+    const idx = months.indexOf(selectedMonth);
+    const last3 = months.slice(Math.max(0, idx-2), idx+1);
+    const datasets = Object.entries(COST_CATS).map(([k,v]) => ({
+      label: v.label,
+      data: last3.map(m => appData.filter(e=>monthOf(e.date)===m && e.type==='cost' && e.cat===k).reduce((s,e)=>s+e.amount,0)),
+      backgroundColor: v.color,
+      borderWidth: 0,
+      borderRadius: 3,
+      stack: 'cost'
+    })).filter(ds => ds.data.some(x => x>0));
+    barChart = new Chart(barCtx,{
+      type:'bar',
+      data:{labels:last3.map(thMonth), datasets},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},
+          tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ฿${fmt(c.raw)}`}}},
+        scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}
+    });
+  }
 
   document.getElementById('cat-body').innerHTML = Object.entries(COST_CATS).map(([k,v])=>{
     const val=catTotals[k]||0;const p=totalCost?(val/totalCost*100):0;
