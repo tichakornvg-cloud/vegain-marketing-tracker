@@ -662,6 +662,7 @@ function thMonth(m) {
   const n=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   return n[parseInt(mo)-1]+' '+(parseInt(y)+543);
 }
+function thYear(y) { return parseInt(y)+543; }
 function thDate(d) {
   if (!d) return '';
   const [y,m,day] = d.split('-');
@@ -830,7 +831,17 @@ function renderDashboard() {
   document.getElementById('dash-empty').style.display='none';
   document.getElementById('dash-content').style.display='block';
 
-  if (!selectedMonth || !months.includes(selectedMonth)) selectedMonth = months[months.length-1];
+  const YEAR = '__YEAR__';
+  const years = [...new Set(months.map(m => m.slice(0,4)))];
+  // default = whole-year overview; reset to it if a stale month is selected
+  if (selectedMonth !== YEAR && !months.includes(selectedMonth)) selectedMonth = YEAR;
+
+  // "ทั้งปี" overview pill (first)
+  const yp = document.createElement('button');
+  yp.className = 'pill'+(selectedMonth===YEAR?' sel':'');
+  yp.textContent = '📅 ทั้งปี'+(years.length===1?' '+thYear(years[0]):'');
+  yp.onclick = () => { selectedMonth=YEAR; renderDashboard(); };
+  pillsEl.appendChild(yp);
 
   months.forEach(m => {
     const p = document.createElement('button');
@@ -840,7 +851,9 @@ function renderDashboard() {
     pillsEl.appendChild(p);
   });
 
-  const mData  = appData.filter(e => monthOf(e.date)===selectedMonth);
+  const isYear = selectedMonth === YEAR;
+  const periodLabel = isYear ? ('ทั้งปี'+(years.length===1?' '+thYear(years[0]):'')) : thMonth(selectedMonth);
+  const mData  = isYear ? appData.slice() : appData.filter(e => monthOf(e.date)===selectedMonth);
   const costs  = mData.filter(e => e.type==='cost');
   const revs   = mData.filter(e => e.type==='revenue');
   const totalCost = costs.reduce((s,e)=>s+e.amount,0);
@@ -854,7 +867,7 @@ function renderDashboard() {
   const topCat = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])[0];
 
   document.getElementById('kpi-row').innerHTML = `
-    <div class="kpi"><div class="kpi-label">ยอดขายรวม</div><div class="kpi-val col-green">฿${fmt(totalRev)}</div><div class="kpi-sub">${thMonth(selectedMonth)}</div></div>
+    <div class="kpi"><div class="kpi-label">ยอดขายรวม</div><div class="kpi-val col-green">฿${fmt(totalRev)}</div><div class="kpi-sub">${periodLabel}</div></div>
     <div class="kpi"><div class="kpi-label">Marketing รวม</div><div class="kpi-val col-red">฿${fmt(totalCost)}</div><div class="kpi-sub">${costs.length} รายการ</div></div>
     <div class="kpi"><div class="kpi-label">% Marketing / ยอดขาย</div><div class="kpi-val ${pctClass}">${mktPct.toFixed(1)}%</div><div class="kpi-sub">${pctNote}</div></div>
     <div class="kpi"><div class="kpi-label">หมวดใช้เงินสูงสุด</div><div class="kpi-val" style="font-size:15px">${topCat?(COST_CATS[topCat[0]]?.label||topCat[0]):'—'}</div><div class="kpi-sub">${topCat?'฿'+fmt(topCat[1]):''}</div></div>`;
