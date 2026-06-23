@@ -1445,6 +1445,7 @@ let mpView='overview';
 let mpMonth='';   // '' = ทั้งปี
 let mpMetric='cost';
 let mpChart=null;
+let mpCharts=[];
 const MP_METRICS={
   cost:{label:'💸 ค่าใช้จ่าย', unit:'฿', color:'#ef4444', val:x=>x.cost},
   newCust:{label:'🧑 ลูกค้าใหม่', unit:'คน', color:'#2d7a4f', val:x=>x.kps.includes('acquisition')?num0(x.r.newCust):0},
@@ -1632,13 +1633,9 @@ function renderMpOverview(camps){
   noResult.slice(0,3).forEach(x=>recs.push(`📝 <strong>${esc(x.c)}</strong> มีค่าใช้จ่าย ฿${fmt(x.cost)} แต่ยังไม่กรอกผล — เพิ่ม KPI/ผลเพื่อวัด ROI`));
   if(!recs.length) recs.push('ยังมีข้อมูลไม่พอจะวิเคราะห์ — เลือก KPI และกรอกผลของแต่ละแคมเปญเพิ่ม');
 
-  // aggregate KPI tiles across all campaigns
   const fmtM=(key,v)=>{ const u=(MP_METRICS[key]||{}).unit; return u==='฿'?'฿'+fmt(v):u==='x'?v.toFixed(2)+'x':fmt(v)+(u?' '+u:''); };
-  const tileKeys=['newCust','leads','triers','followers','redeem','sales'];
-  const tiles=tileKeys.map(key=>{ const m=MP_METRICS[key]; const sum=cd.reduce((s,x)=>s+m.val(x),0); if(sum<=0) return ''; const best=cd.slice().sort((a,b)=>m.val(b)-m.val(a))[0]; return `<div class="kpi"><div class="kpi-label">${m.label} (รวม)</div><div class="kpi-val" style="font-size:18px;color:${m.color}">${fmtM(key,sum)}</div><div class="kpi-sub">🏆 ${esc(best.c)} · ${fmtM(key,m.val(best))}</div></div>`; }).filter(Boolean).join('');
-
-  const M=MP_METRICS[mpMetric]||MP_METRICS.cost;
-  const chartRows=cd.map(x=>({c:x.c,v:M.val(x)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const costRows=cd.map(x=>({c:x.c,v:x.cost})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const donutKeys=['newCust','leads','triers','followers','redeem','sales'].filter(key=>cd.reduce((s,x)=>s+MP_METRICS[key].val(x),0)>0);
 
   el.innerHTML=`
     <div class="kpi-row">
@@ -1647,11 +1644,11 @@ function renderMpOverview(camps){
       <div class="kpi"><div class="kpi-label">ยอดขายจากแคมเปญ</div><div class="kpi-val col-green">฿${fmt(totalSales)}</div></div>
       <div class="kpi"><div class="kpi-label">ROAS รวม</div><div class="kpi-val ${roas>=1?'col-green':'col-red'}">${roas.toFixed(2)}x</div></div>
     </div>
-    ${tiles?`<div class="card"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📊 ผลรวม KPI ทุกแคมเปญ</div><div class="kpi-row">${tiles}</div></div>`:''}
     <div class="chart-row">
-      <div class="chart-card"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">สัดส่วนตามแคมเปญ <select onchange="mpSetMetric(this.value)" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border)">${Object.entries(MP_METRICS).map(([k,m])=>`<option value="${k}"${mpMetric===k?' selected':''}>${m.label}</option>`).join('')}</select></h3><div class="chart-wrap"><canvas id="mpChart"></canvas></div></div>
+      <div class="chart-card"><h3>💸 ค่าใช้จ่ายแต่ละแคมเปญ</h3><div class="chart-wrap"><canvas id="mpCostChart"></canvas></div></div>
       <div class="chart-card"><h3>🔎 วิเคราะห์ & ข้อแนะนำ</h3><ul style="font-size:13px;line-height:1.9;padding-left:18px;margin:6px 0 0">${recs.map(r=>'<li>'+r+'</li>').join('')}</ul></div>
     </div>
+    ${donutKeys.length?`<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:4px 0 10px">📊 ผลแต่ละ KPI — สัดส่วนตามแคมเปญ</div><div class="chart-row">${donutKeys.map(key=>{ const m=MP_METRICS[key]; const sum=cd.reduce((s,x)=>s+m.val(x),0); return `<div class="chart-card"><h3>${m.label}</h3><div style="font-size:24px;font-weight:800;color:${m.color};margin:-4px 0 6px">${fmtM(key,sum)}</div><div class="chart-wrap"><canvas id="mpD_${key}"></canvas></div></div>`; }).join('')}</div>`:''}
     <div class="card">
       <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">ผลลัพธ์แต่ละแคมเปญ (กดเพื่อดู/แก้)</div>
       ${camps.length?camps.map(c=>{ const x=cd.find(z=>z.c===c); const r=x.r; const safe=esc(c).replace(/'/g,"\\'");
@@ -1663,12 +1660,14 @@ function renderMpOverview(camps){
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">${chips||'<span style="font-size:11px;color:var(--muted)">ยังไม่กรอกผล</span>'}</div>
         </div>`; }).join(''):'<div style="text-align:center;color:var(--muted)">ยังไม่มีแคมเปญ — กด 🎯 สร้างแคมเปญ</div>'}
     </div>`;
-  if(mpChart){mpChart.destroy();mpChart=null;}
-  const cv=document.getElementById('mpChart');
-  if(cv && chartRows.length){
-    const tot=chartRows.reduce((s,x)=>s+x.v,0);
-    mpChart=new Chart(cv.getContext('2d'),{type:'doughnut',data:{labels:chartRows.map(x=>x.c),datasets:[{data:chartRows.map(x=>x.v),backgroundColor:chartRows.map((_,i)=>PALETTE[i%PALETTE.length]),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:8}},tooltip:{callbacks:{label:c=>' '+fmtM(mpMetric,c.raw)+' ('+(tot?(c.raw/tot*100).toFixed(1):0)+'%)'}}}}});
-  } else if(cv){ cv.parentElement.innerHTML='<div style="text-align:center;color:var(--muted);padding-top:60px;font-size:13px">ยังไม่มีข้อมูลของตัวชี้วัดนี้</div>'; }
+
+  mpCharts.forEach(ch=>{try{ch.destroy();}catch(e){}}); mpCharts=[];
+  // cost bar chart
+  (function(){ const cv=document.getElementById('mpCostChart'); if(!cv||!costRows.length) return;
+    mpCharts.push(new Chart(cv.getContext('2d'),{type:'bar',data:{labels:costRows.map(x=>x.c),datasets:[{data:costRows.map(x=>x.v),backgroundColor:'#ef4444',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' ฿'+fmt(c.raw)}}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}})); })();
+  // per-KPI donut charts
+  donutKeys.forEach(key=>{ const m=MP_METRICS[key]; const rows=cd.map(x=>({c:x.c,v:m.val(x)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v); const cv=document.getElementById('mpD_'+key); if(!cv||!rows.length) return; const tot=rows.reduce((s,x)=>s+x.v,0);
+    mpCharts.push(new Chart(cv.getContext('2d'),{type:'doughnut',data:{labels:rows.map(x=>x.c),datasets:[{data:rows.map(x=>x.v),backgroundColor:rows.map((_,i)=>PALETTE[i%PALETTE.length]),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},tooltip:{callbacks:{label:c=>' '+fmtM(key,c.raw)+' ('+(tot?(c.raw/tot*100).toFixed(1):0)+'%)'}}}}})); });
 }
 
 function renderMpCampaign(name){
