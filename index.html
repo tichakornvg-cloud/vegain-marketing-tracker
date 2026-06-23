@@ -545,6 +545,23 @@ function costSubLabel(e){
   return e.cat || e.sub || 'อื่นๆ';
 }
 function revChannel(e){ return REV_CHANNELS.includes(e.cat) ? e.cat : (LEGACY_REV[e.cat] || e.cat || 'อื่นๆ'); }
+function payrollBucket(desc){
+  const d=desc||'';
+  if(/Bar\s*Crew/i.test(d)) return 'เงินเดือน Bar Crew';
+  if(/ออฟฟิศ/.test(d))      return 'เงินเดือนออฟฟิศ';
+  if(/ล่วงหน้า/.test(d))     return 'เบิกล่วงหน้า';
+  if(/รายวัน/.test(d))       return 'ค่าจ้างรายวัน';
+  if(/โบนัส/.test(d))        return 'โบนัส';
+  return 'อื่นๆ';
+}
+// breakdown key for the per-group donut/table (uses real detail, not empty sub-cat)
+function breakdownKey(e){
+  const g=costGroup(e);
+  if(e.cat && e.cat!=='อื่นๆ') return e.cat;        // manual entries with a real sub-category
+  if(g==='payroll') return payrollBucket(e.desc);   // payroll → keyword buckets
+  const v=(e.vendor||'').trim();
+  return v || 'อื่นๆ';                              // other groups → by vendor
+}
 function branchLabel(b){ return BRANCHES[b] || ''; }
 function accountLabel(a){ return ACCOUNTS[a] || ''; }
 
@@ -1018,7 +1035,7 @@ function renderDashboard() {
   const keyOf = e => {
     if (isRevView) return revChannel(e);
     if (selectedGroup==='all') return costGroup(e);
-    return (e.vendor||'').trim() || costSubLabel(e) || '(ไม่ระบุร้าน)';
+    return breakdownKey(e);
   };
   const labelOf = k => (isRevView || selectedGroup!=='all') ? k : groupLabel(k);
   const colorOf = (k,i) => (isRevView || selectedGroup!=='all') ? PALETTE[i%PALETTE.length] : groupColor(k);
@@ -1144,7 +1161,7 @@ function renderDashboard() {
     const topFreq=Object.entries(vCount).sort((a,b)=>b[1]-a[1])[0];
     const topSpend=Object.entries(vTotal).sort((a,b)=>b[1]-a[1])[0];
     const vendorShare=(topSpend&&total)? topSpend[1]/total*100:0;
-    const subT={}; view.forEach(e=>{ const kk=isRevView?revChannel(e):costSubLabel(e); subT[kk]=(subT[kk]||0)+e.amount; });
+    const subT={}; view.forEach(e=>{ const kk=isRevView?revChannel(e):breakdownKey(e); subT[kk]=(subT[kk]||0)+e.amount; });
     const topSub=Object.entries(subT).sort((a,b)=>b[1]-a[1])[0];
     const subShare=(topSub&&total)? topSub[1]/total*100:0;
     const maxItem=[...view].sort((a,b)=>b.amount-a.amount)[0];
