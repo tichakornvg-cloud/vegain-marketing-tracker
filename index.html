@@ -1451,6 +1451,7 @@ const KPI_TYPES={
   influencer:{label:'👥 Influencer / Followers', fields:[['newFollowers','ผู้ติดตามใหม่ (คน)'],['reach','Reach'],['engagement','Engagement'],['sales','ยอดขายที่ได้ (฿)']]},
 };
 
+function getKpis(r){ return Array.isArray(r.kpis)?r.kpis:(r.kpi?[r.kpi]:[]); }
 function kpiDerived(kpi,r,cost){
   const n=k=>num0(r[k]);
   switch(kpi){
@@ -1490,7 +1491,7 @@ function mpOpen(name){ mpView=name; renderMktPerf(); }
 function renderMktPerf(){
   if(!document.getElementById('tab-mktperf')) return;
   const camps=mpCampaigns();
-  if(mpView!=='overview' && !camps.includes(mpView)) mpView='overview';
+  if(mpView!=='overview' && mpView!=='definition' && !camps.includes(mpView)) mpView='overview';
   const sub=document.getElementById('mp-subnav'); sub.innerHTML='';
   const chip=(key,label)=>{ const b=document.createElement('button'); b.className='pill'+(mpView===key?' sel':''); b.textContent=label; b.onclick=()=>{mpView=key;renderMktPerf();}; return b; };
   sub.appendChild(chip('overview','📊 ภาพรวม'));
@@ -1576,7 +1577,7 @@ function renderMpOverview(camps){
     <div class="chart-row">
       <div class="chart-card"><h3>ค่าใช้จ่ายแต่ละแคมเปญ</h3><div class="chart-wrap"><canvas id="mpChart"></canvas></div></div>
       <div class="chart-card"><h3>สรุปแคมเปญ (กดเพื่อดูรายละเอียด)</h3><div style="overflow:auto;max-height:320px"><table class="tbl" style="font-size:12px"><thead><tr><th>แคมเปญ</th><th>KPI</th><th style="text-align:right">ค่าใช้จ่าย</th><th style="text-align:right">ผลหลัก</th></tr></thead><tbody>${
-        camps.map(c=>{ const r=campaignResults[resKey(c)]||{}; const cost=mpCampaignSpend(c); const d=kpiDerived(r.kpi,r,cost); const main=d.length?d[d.length-1]:null; return `<tr style="cursor:pointer" onclick="mpOpen('${esc(c).replace(/'/g,"\\'")}')"><td>🎯 ${esc(c)}</td><td>${r.kpi?esc((KPI_TYPES[r.kpi]||{}).label||r.kpi):'—'}</td><td style="text-align:right">฿${fmt(cost)}</td><td style="text-align:right">${main?esc(main[0]+': '+main[1]):'—'}</td></tr>`; }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted)">ยังไม่มีแคมเปญ — กด 🎯 สร้างแคมเปญ</td></tr>'
+        camps.map(c=>{ const r=campaignResults[resKey(c)]||{}; const cost=mpCampaignSpend(c); const kps=getKpis(r); const d=kps.length?kpiDerived(kps[0],r,cost):[]; const main=d.length?d[d.length-1]:null; const kpLabel=kps.length?kps.map(k=>(KPI_TYPES[k]||{}).label||k).join(', '):'—'; return `<tr style="cursor:pointer" onclick="mpOpen('${esc(c).replace(/'/g,"\\'")}')"><td>🎯 ${esc(c)}</td><td>${esc(kpLabel)}</td><td style="text-align:right">฿${fmt(cost)}</td><td style="text-align:right">${main?esc(main[0]+': '+main[1]):'—'}</td></tr>`; }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted)">ยังไม่มีแคมเปญ — กด 🎯 สร้างแคมเปญ</td></tr>'
       }</tbody></table></div></div>
     </div>`;
   if(mpChart){mpChart.destroy();mpChart=null;}
@@ -1591,8 +1592,9 @@ function renderMpCampaign(name){
   const r=campaignResults[resKey(name)]||{};
   const cost=mpCampaignSpend(name);
   const exps=appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name&&inMpMonth(e)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const kpiOpts='<option value="">— เลือก KPI —</option>'+Object.entries(KPI_TYPES).map(([k,v])=>`<option value="${k}"${r.kpi===k?' selected':''}>${v.label}</option>`).join('');
-  const derived=kpiDerived(r.kpi,r,cost);
+  const selKpis=getKpis(r);
+  const kpiChecks=Object.entries(KPI_TYPES).map(([k,v])=>`<label class="pill" style="cursor:pointer;${selKpis.includes(k)?'background:#2d7a4f;color:#fff':''}"><input type="checkbox" class="mp-kpi-chk" value="${k}" ${selKpis.includes(k)?'checked':''} onchange="renderMpKpiFields()" style="margin-right:5px;vertical-align:middle">${v.label}</label>`).join('');
+  const derivedHtml=selKpis.map(kpi=>{ const d=kpiDerived(kpi,r,cost); if(!d.length) return ''; return `<div style="font-size:12px;font-weight:600;color:var(--green);margin:10px 0 4px">${esc((KPI_TYPES[kpi]||{}).label||kpi)}</div><div class="kpi-row">${d.map(x=>`<div class="kpi"><div class="kpi-label">${esc(x[0])}</div><div class="kpi-val" style="font-size:16px">${esc(x[1])}</div></div>`).join('')}</div>`; }).join('');
   const safe=esc(name).replace(/'/g,"\\'");
   el.innerHTML=`
     <div class="card">
@@ -1605,12 +1607,12 @@ function renderMpCampaign(name){
         <div class="form-group"><label class="fl">ระยะเวลา: เริ่ม</label><input type="date" id="mp-start" value="${esc(r.startDate||'')}"></div>
         <div class="form-group"><label class="fl">ระยะเวลา: สิ้นสุด</label><input type="date" id="mp-end" value="${esc(r.endDate||'')}"></div>
         <div class="form-group"><label class="fl">ค่าใช้จ่ายรวม (จาก log)</label><div class="kpi-val col-red" style="font-size:18px">฿${fmt(cost)}</div></div>
-        <div class="form-group"><label class="fl">KPI</label><select id="mp-kpi" onchange="renderMpKpiFields()">${kpiOpts}</select></div>
-        <div class="form-group full"><label class="fl">ผลลัพธ์ตาม KPI</label><div id="mp-kpi-fields" class="form-grid" style="padding:0"></div></div>
+        <div class="form-group full"><label class="fl">KPI (เลือกได้หลายอัน)</label><div id="mp-kpi-checks" style="display:flex;flex-wrap:wrap;gap:6px">${kpiChecks}</div></div>
+        <div class="form-group full"><label class="fl">ผลลัพธ์ตาม KPI</label><div id="mp-kpi-fields"></div></div>
         <div class="form-group full"><label class="fl">Note</label><textarea id="mp-note" rows="2">${esc(r.note||'')}</textarea></div>
       </div>
       <div class="modal-btns"><button class="btn btn-primary" onclick="saveCampaignMeta('${safe}')">💾 บันทึกแคมเปญ</button></div>
-      ${derived.length?`<div class="kpi-row" style="margin-top:14px">${derived.map(d=>`<div class="kpi"><div class="kpi-label">${esc(d[0])}</div><div class="kpi-val" style="font-size:16px">${esc(d[1])}</div></div>`).join('')}</div>`:''}
+      ${derivedHtml?`<div style="margin-top:8px">${derivedHtml}</div>`:''}
     </div>
     <div class="card" style="overflow-x:auto"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📋 ค่าใช้จ่ายของแคมเปญนี้ (${exps.length} รายการ)</div>
       <table class="tbl"><thead><tr><th>วันที่</th><th>รายละเอียด</th><th>ร้านค้า</th><th style="text-align:right">จำนวน</th></tr></thead><tbody>${
@@ -1619,20 +1621,31 @@ function renderMpCampaign(name){
   renderMpKpiFields();
 }
 
+function selectedMpKpis(){ return [...document.querySelectorAll('.mp-kpi-chk:checked')].map(c=>c.value); }
 function renderMpKpiFields(){
-  const sel=document.getElementById('mp-kpi'); if(!sel) return;
-  const kpi=sel.value; const r=campaignResults[resKey(mpView)]||{};
-  const fields=(KPI_TYPES[kpi]||{}).fields||[];
-  const box=document.getElementById('mp-kpi-fields');
-  box.innerHTML=fields.length?fields.map(([k,label])=>`<div class="form-group"><label class="fl">${esc(label)}</label><input type="number" id="mp-f-${k}" value="${r[k]!=null?r[k]:''}" placeholder="0"></div>`).join(''):'<div style="font-size:12px;color:var(--muted)">เลือก KPI เพื่อกรอกผลลัพธ์</div>';
+  const box=document.getElementById('mp-kpi-fields'); if(!box) return;
+  // highlight selected chips
+  document.querySelectorAll('.mp-kpi-chk').forEach(c=>{ c.parentElement.style.cssText='cursor:pointer;'+(c.checked?'background:#2d7a4f;color:#fff':''); });
+  const kpis=selectedMpKpis(); const r=campaignResults[resKey(mpView)]||{};
+  if(!kpis.length){ box.innerHTML='<div style="font-size:12px;color:var(--muted)">เลือก KPI เพื่อกรอกผลลัพธ์</div>'; return; }
+  const seen={}; let html='';
+  kpis.forEach(kpi=>{
+    const t=KPI_TYPES[kpi]; if(!t) return;
+    const fields=t.fields.filter(([key])=>!seen[key]);
+    fields.forEach(([key])=>seen[key]=1);
+    if(!fields.length) return;
+    html+=`<div style="font-size:12px;font-weight:600;color:var(--green);margin:6px 0">${esc(t.label)}</div><div class="form-grid" style="padding:0">`+
+      fields.map(([key,label])=>`<div class="form-group"><label class="fl">${esc(label)}</label><input type="number" id="mp-f-${key}" value="${r[key]!=null?r[key]:''}" placeholder="0"></div>`).join('')+`</div>`;
+  });
+  box.innerHTML=html;
 }
 
 function saveCampaignMeta(name){
   if(!resultsRef) return;
-  const kpi=document.getElementById('mp-kpi').value;
-  const fields=(KPI_TYPES[kpi]||{}).fields||[];
-  const data={ name, objective:document.getElementById('mp-obj').value.trim(), kpi, startDate:document.getElementById('mp-start').value, endDate:document.getElementById('mp-end').value, note:document.getElementById('mp-note').value.trim(), updatedBy:currentUser||'' };
-  fields.forEach(([k])=>{ const elf=document.getElementById('mp-f-'+k); data[k]=elf?num0(elf.value):0; });
+  const kpis=selectedMpKpis();
+  const data={ name, objective:document.getElementById('mp-obj').value.trim(), kpis, kpi:kpis[0]||'', startDate:document.getElementById('mp-start').value, endDate:document.getElementById('mp-end').value, note:document.getElementById('mp-note').value.trim(), updatedBy:currentUser||'' };
+  const keys=new Set(); kpis.forEach(k=>((KPI_TYPES[k]||{}).fields||[]).forEach(([key])=>keys.add(key)));
+  keys.forEach(key=>{ const elf=document.getElementById('mp-f-'+key); if(elf) data[key]=num0(elf.value); });
   resultsRef.child(resKey(name)).set(data).then(()=>showToast('✅ บันทึกแคมเปญแล้ว')).catch(err=>showToast('❌ '+err.message,true));
 }
 
