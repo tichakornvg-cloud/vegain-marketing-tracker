@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vegain — Marketing Tracker</title>
+<title>Vegain — Performance Overview</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -166,7 +166,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 <div class="loading-overlay" id="login-overlay" style="display:none;background:rgba(255,255,255,.97)">
   <div style="text-align:center;max-width:340px;padding:0 20px">
     <div style="font-size:40px">🌿</div>
-    <h2 style="margin:10px 0 4px">Vegain — Marketing Tracker</h2>
+    <h2 style="margin:10px 0 4px">Vegain — Performance Overview</h2>
     <p style="font-size:13px;color:var(--muted);margin-bottom:22px">เข้าสู่ระบบด้วยบัญชี Google ของ <strong>@vegain-th.com</strong> เพื่อใช้งาน</p>
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="signIn()">🔐 เข้าสู่ระบบด้วย Google</button>
     <p id="login-err" style="display:none;color:var(--red);font-size:12px;margin-top:14px"></p>
@@ -234,16 +234,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 
 <div class="header">
   <div class="logo">🌿</div>
-  <div><h1>Vegain Marketing Tracker</h1><div class="sub">ข้อมูลกลาง — sync ทุกคนในทีม</div></div>
+  <div><h1>Vegain Performance Overview</h1><div class="sub">ข้อมูลกลาง — sync ทุกคนในทีม</div></div>
   <div id="conn-badge" class="conn-badge offline" style="font-size:11px">⏳ กำลังเชื่อมต่อ...</div>
-  <button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:8px" onclick="openModal()">+ เพิ่มรายการ</button>
   <button id="current-user" class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:8px" onclick="changeUser()" title="เปลี่ยนผู้ใช้"></button>
   <span id="user-email" style="font-size:11px;color:#fff;opacity:.85;margin-left:8px"></span>
   <button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);margin-left:4px" onclick="signOut()">ออกจากระบบ</button>
 </div>
 
 <nav class="nav">
-  <button class="nav-btn active" onclick="nav('dashboard',this)">📊 Dashboard</button>
+  <button class="nav-btn active" onclick="nav('dashboard',this)">📊 Overview Dashboard</button>
   <button class="nav-btn" onclick="nav('mktperf',this)">📣 Marketing Performance</button>
   <button class="nav-btn" onclick="nav('campaign',this)">🎯 แคมเปญ</button>
   <button class="nav-btn" onclick="nav('log',this)">📋 Log รายการ</button>
@@ -253,6 +252,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 
   <!-- ══ DASHBOARD ══ -->
   <div id="tab-dashboard" class="section active">
+    <div class="log-header">
+      <div style="font-size:16px;font-weight:700">📊 Overview Dashboard</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="openImport()">📥 เพิ่มข้อมูล (Import Excel)</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal()">+ เพิ่มรายการ</button>
+      </div>
+    </div>
     <div class="pill-row">
       <span class="pill-label">มุมมอง:</span>
       <div id="group-pills" style="display:flex;flex-wrap:wrap;gap:6px"></div>
