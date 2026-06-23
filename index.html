@@ -1441,6 +1441,8 @@ const KPI_TYPES={
   awareness:{label:'📢 Awareness / Reach', fields:[['reach','Reach (คน)'],['impressions','Impressions']]},
   engagement:{label:'❤️ Engagement', fields:[['engagement','Engagement (ครั้ง)'],['clicks','Clicks']]},
   leads:{label:'📝 Leads', fields:[['leads','จำนวน Leads (คน)']]},
+  trial:{label:'🥤 Trial / บูทชิม', fields:[['triers','ผู้มาชิม (คน)'],['samples','ตัวอย่างที่แจก'],['leads','แอด LINE/ลงชื่อ (คน)'],['buyers','ซื้อทันที (คน)']]},
+  influencer:{label:'👥 Influencer / Followers', fields:[['newFollowers','ผู้ติดตามใหม่ (คน)'],['reach','Reach'],['engagement','Engagement'],['sales','ยอดขายที่ได้ (฿)']]},
 };
 
 function kpiDerived(kpi,r,cost){
@@ -1452,6 +1454,8 @@ function kpiDerived(kpi,r,cost){
     case 'awareness':{ const cpm=n('impressions')?cost/n('impressions')*1000:0; return [['Reach',fmt(n('reach'))],['Impressions',fmt(n('impressions'))],['CPM',n('impressions')?'฿'+fmt(Math.round(cpm)):'—']]; }
     case 'engagement':{ const cpe=n('engagement')?cost/n('engagement'):0; return [['Engagement',fmt(n('engagement'))],['CPE',n('engagement')?'฿'+cpe.toFixed(1):'—']]; }
     case 'leads':{ const cpl=n('leads')?cost/n('leads'):0; return [['Leads',fmt(n('leads'))],['CPL',n('leads')?'฿'+fmt(Math.round(cpl)):'—']]; }
+    case 'trial':{ const conv=n('triers')?n('buyers')/n('triers')*100:0; const lr=n('triers')?n('leads')/n('triers')*100:0; const cpt=n('triers')?cost/n('triers'):0; return [['ผู้มาชิม',fmt(n('triers'))+' คน'],['→ ซื้อทันที',n('triers')?conv.toFixed(1)+'%':'—'],['→ เป็น lead',n('triers')?lr.toFixed(1)+'%':'—'],['ต้นทุน/คนชิม',n('triers')?'฿'+fmt(Math.round(cpt)):'—']]; }
+    case 'influencer':{ const cpf=n('newFollowers')?cost/n('newFollowers'):0; const er=n('reach')?n('engagement')/n('reach')*100:0; const roas=cost?n('sales')/cost:0; return [['ผู้ติดตามใหม่',fmt(n('newFollowers'))],['ต้นทุน/ฟอล',n('newFollowers')?'฿'+cpf.toFixed(1):'—'],['Eng. rate',n('reach')?er.toFixed(1)+'%':'—'],['ROAS',cost&&n('sales')?roas.toFixed(2)+'x':'—']]; }
     default: return [];
   }
 }
