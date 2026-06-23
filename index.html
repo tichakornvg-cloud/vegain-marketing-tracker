@@ -1488,8 +1488,55 @@ function renderMktPerf(){
   const sub=document.getElementById('mp-subnav'); sub.innerHTML='';
   const chip=(key,label)=>{ const b=document.createElement('button'); b.className='pill'+(mpView===key?' sel':''); b.textContent=label; b.onclick=()=>{mpView=key;renderMktPerf();}; return b; };
   sub.appendChild(chip('overview','📊 ภาพรวม'));
+  sub.appendChild(chip('definition','📖 Definition'));
   camps.forEach(c=>sub.appendChild(chip(c,'🎯 '+c)));
-  if(mpView==='overview') renderMpOverview(camps); else renderMpCampaign(mpView);
+  if(mpView==='overview') renderMpOverview(camps);
+  else if(mpView==='definition') renderMpDefinition();
+  else renderMpCampaign(mpView);
+}
+
+function renderMpDefinition(){
+  const stages=[
+    ['1','📢 Awareness / Reach','#3b82f6','คนที่ได้<strong>เห็น/รู้จัก</strong>แบรนด์ ยังไม่สนใจซื้อ','คนฟอลจากอินฟลู, คนเห็นโฆษณา, ผู้ติดตามใหม่','👥 Influencer · 📢 Awareness','Reach, Impressions, ผู้ติดตามใหม่, CPM'],
+    ['2','🥤 Trial','#14b8a6','คนที่ได้<strong>ลองสินค้า</strong> แต่ยังไม่ซื้อ','คนมาชิมที่บูท, คนได้ของแจกชิม','🥤 Trial / บูทชิม','ผู้มาชิม, % ชิมแล้วซื้อ, ต้นทุน/คนชิม'],
+    ['3','📝 Lead','#f59e0b','คนที่แสดง<strong>ความสนใจจะซื้อ</strong> / ให้ข้อมูลติดต่อ','แอด LINE, ลงชื่อรับโปร, ทักถามราคา','📝 Leads','จำนวน Leads, CPL (ต้นทุนต่อ lead)'],
+    ['4','🧑 Acquire','#2d7a4f','คนที่<strong>ซื้อจริงครั้งแรก</strong> = ลูกค้าใหม่','คนชิมแล้วซื้อ, สั่งครั้งแรกจากโฆษณา','🧑 Acquire ลูกค้าใหม่','ลูกค้าใหม่, CPA, % เทียบเป้า'],
+    ['5','🎟️ Redemption / Retention','#8b5cf6','ลูกค้า<strong>กลับมาซื้อซ้ำ</strong> / ใช้คูปอง','ใช้คูปองส่วนลด, สมาชิกกลับมาซื้อ','🎟️ Redemption','Redeem กี่คน/จากกี่คน, Redemption %'],
+  ];
+  const sales=['💰 Sales / ROAS','#16a34a','ผลลัพธ์ปลายทาง — ยอดขายที่เกิดจากแคมเปญ เทียบกับเงินที่ลงไป','ใช้ได้กับทุกแคมเปญที่วัดยอดขายตรงได้','💰 Sales / ROAS','ยอดขาย, ROAS (ยอดขาย ÷ ต้นทุน)'];
+  document.getElementById('mp-content').innerHTML=`
+    <div class="card">
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">📖 Marketing Funnel — คนอยู่ขั้นไหน?</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">ลูกค้าเดินจาก "รู้จัก" → "ลอง" → "สนใจ" → "ซื้อ" → "ซื้อซ้ำ" — แต่ละขั้นวัดด้วย KPI คนละแบบ เลือก KPI ให้ตรงขั้นของกิจกรรมนั้น</div>
+      ${stages.map(s=>`
+        <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="flex:0 0 4px;background:${s[2]};border-radius:4px"></div>
+          <div style="flex:1">
+            <div style="font-weight:700;color:${s[2]}">${s[1]}</div>
+            <div style="font-size:13px;margin:4px 0">${s[3]}</div>
+            <div style="font-size:12px;color:var(--muted)">ตัวอย่าง: ${s[4]}</div>
+            <div style="font-size:12px;margin-top:4px"><span style="background:${s[2]}1a;color:${s[2]};padding:2px 8px;border-radius:10px;font-weight:600">KPI ที่ใช้: ${s[5]}</span> &nbsp;<span style="color:var(--muted)">วัด: ${s[6]}</span></div>
+          </div>
+        </div>`).join('')}
+      <div style="display:flex;gap:12px;padding:12px 0">
+        <div style="flex:0 0 4px;background:${sales[1]};border-radius:4px"></div>
+        <div style="flex:1">
+          <div style="font-weight:700;color:${sales[1]}">${sales[0]}</div>
+          <div style="font-size:13px;margin:4px 0">${sales[2]}</div>
+          <div style="font-size:12px;color:var(--muted)">${sales[3]}</div>
+          <div style="font-size:12px;margin-top:4px"><span style="background:${sales[1]}1a;color:${sales[1]};padding:2px 8px;border-radius:10px;font-weight:600">KPI ที่ใช้: ${sales[4]}</span> &nbsp;<span style="color:var(--muted)">วัด: ${sales[5]}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px">💡 ตัวอย่างจริง</div>
+      <ul style="font-size:13px;line-height:1.9;padding-left:18px;margin:0">
+        <li><strong>บูทชิม:</strong> คนมาชิม = <em>Trial</em> → ถ้าแอด LINE = <em>Lead</em> → ถ้าซื้อ = <em>Acquire</em> (เลือก KPI 🥤 Trial เพื่อดู conversion ทั้งสาย)</li>
+        <li><strong>จ้างอินฟลู:</strong> คนฟอลใหม่ = <em>Awareness</em> → วัดด้วย 👥 Influencer (ต้นทุน/ฟอล + เกิดยอดขายไหม)</li>
+        <li><strong>ยิงแอด Acquisition:</strong> เน้นลูกค้าใหม่ → 🧑 Acquire (ดู CPA, % เทียบเป้า)</li>
+        <li><strong>ส่งคูปองลูกค้าเก่า:</strong> → 🎟️ Redemption (กี่คนใช้จากที่ส่งไป)</li>
+      </ul>
+    </div>`;
 }
 
 function renderMpOverview(camps){
