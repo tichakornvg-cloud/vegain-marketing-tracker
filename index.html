@@ -1474,12 +1474,27 @@ function kpiDerived(kpi,r,cost){
 }
 
 function mpCampaignSpend(name){ return appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name&&inMpMonth(e)).reduce((s,e)=>s+e.amount,0); }
+function isCampDeleted(name){ const r=campaignResults[resKey(name)]; return !!(r&&r.deleted); }
 function mpCampaigns(){
   const set=new Set();
   appData.forEach(e=>{ if(e.type==='cost'&&costGroup(e)==='marketing'&&e.campaign) set.add(e.campaign); });
   (campaignNames||[]).forEach(c=>{ if(c) set.add(c); });
   Object.values(campaignResults||{}).forEach(r=>{ if(r&&r.name) set.add(r.name); });
-  return [...set].sort();
+  return [...set].filter(c=>!isCampDeleted(c)).sort();
+}
+function mpDeletedCampaigns(){ return Object.values(campaignResults||{}).filter(r=>r&&r.deleted&&r.name).map(r=>r.name).sort(); }
+function deleteCampaign(name){
+  if(!resultsRef) return;
+  if(!confirm('ลบแคมเปญ "'+name+'"?\n(ค่าใช้จ่ายที่ลงไว้ยังอยู่ใน Dashboard/Log — ดูและกู้คืนได้ที่ 🗑 ที่ลบ)')) return;
+  resultsRef.child(resKey(name)).update({name, deleted:true, deletedAt:new Date().toISOString().slice(0,10), deletedBy:currentUser||''})
+    .then(()=>{ showToast('🗑 ลบแคมเปญแล้ว'); mpView='overview'; renderMktPerf(); })
+    .catch(err=>showToast('❌ '+err.message,true));
+}
+function restoreCampaign(name){
+  if(!resultsRef) return;
+  resultsRef.child(resKey(name)).update({deleted:false})
+    .then(()=>{ showToast('♻️ กู้คืนแคมเปญแล้ว'); mpView=name; renderMktPerf(); })
+    .catch(err=>showToast('❌ '+err.message,true));
 }
 
 function openModalMkt(camp){
@@ -1497,12 +1512,14 @@ function mpOpen(name){ mpView=name; renderMktPerf(); }
 function renderMktPerf(){
   if(!document.getElementById('tab-mktperf')) return;
   const camps=mpCampaigns();
-  if(mpView!=='overview' && mpView!=='definition' && !camps.includes(mpView)) mpView='overview';
+  const del=mpDeletedCampaigns();
+  if(mpView!=='overview' && mpView!=='definition' && mpView!=='trash' && !camps.includes(mpView)) mpView='overview';
   const sub=document.getElementById('mp-subnav'); sub.innerHTML='';
   const chip=(key,label)=>{ const b=document.createElement('button'); b.className='pill'+(mpView===key?' sel':''); b.textContent=label; b.onclick=()=>{mpView=key;renderMktPerf();}; return b; };
   sub.appendChild(chip('overview','📊 ภาพรวม'));
   sub.appendChild(chip('definition','📖 Definition'));
   camps.forEach(c=>sub.appendChild(chip(c,'🎯 '+c)));
+  if(del.length) sub.appendChild(chip('trash','🗑 ที่ลบ ('+del.length+')'));
 
   // month pills
   const mEl=document.getElementById('mp-months');
@@ -1519,7 +1536,16 @@ function renderMktPerf(){
 
   if(mpView==='overview') renderMpOverview(camps);
   else if(mpView==='definition') renderMpDefinition();
+  else if(mpView==='trash') renderMpTrash(del);
   else renderMpCampaign(mpView);
+}
+
+function renderMpTrash(del){
+  const el=document.getElementById('mp-content');
+  el.innerHTML=`<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:4px">🗑 แคมเปญที่ลบ</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">ค่าใช้จ่ายที่เคยลงไว้ยังอยู่ใน Dashboard/Log — กดกู้คืนเพื่อให้แคมเปญกลับมาแสดง</div>
+    ${del.length?del.map(name=>{ const r=campaignResults[resKey(name)]||{}; const cost=mpCampaignSpend(name); return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)"><div><div style="font-weight:600">🎯 ${esc(name)}</div><div style="font-size:12px;color:var(--muted)">ค่าใช้จ่าย ฿${fmt(cost)}${r.deletedAt?' · ลบเมื่อ '+esc(r.deletedAt):''}</div></div><button class="btn btn-ghost btn-sm" onclick="restoreCampaign('${esc(name).replace(/'/g,"\\'")}')">♻️ กู้คืน</button></div>`; }).join(''):'<div style="text-align:center;color:var(--muted)">ไม่มีแคมเปญที่ลบ</div>'}
+  </div>`;
 }
 
 function renderMpDefinition(){
@@ -1570,9 +1596,30 @@ function renderMpOverview(camps){
   const el=document.getElementById('mp-content');
   const mkt=appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&inMpMonth(e));
   const totalCost=mkt.reduce((s,e)=>s+e.amount,0);
-  let totalSales=0; camps.forEach(c=>{ const r=campaignResults[resKey(c)]; if(r&&r.kpi==='sales') totalSales+=num0(r.sales); });
+  // per-campaign metrics
+  const cd=camps.map(c=>{ const r=campaignResults[resKey(c)]||{}; const cost=mpCampaignSpend(c); const kps=getKpis(r);
+    const sales=num0(r.sales); const hasSales=kps.includes('sales')||kps.includes('influencer');
+    const roas=(hasSales&&cost)?sales/cost:null; const cpa=(kps.includes('acquisition')&&num0(r.newCust))?cost/num0(r.newCust):null;
+    return {c,r,cost,kps,sales:hasSales?sales:0,roas,cpa,newCust:kps.includes('acquisition')?num0(r.newCust):0}; });
+  const totalSales=cd.reduce((s,x)=>s+x.sales,0);
   const roas=totalCost?totalSales/totalCost:0;
-  const spendByCamp=camps.map(c=>({c,v:mpCampaignSpend(c)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  const spendByCamp=cd.filter(x=>x.cost>0).sort((a,b)=>b.cost-a.cost);
+
+  // insights / recommendations
+  const withRoas=cd.filter(x=>x.roas!=null&&x.cost>0);
+  const bestRoas=withRoas.slice().sort((a,b)=>b.roas-a.roas)[0];
+  const worstRoas=withRoas.slice().sort((a,b)=>a.roas-b.roas)[0];
+  const highCpa=cd.filter(x=>x.cpa!=null).sort((a,b)=>b.cpa-a.cpa)[0];
+  const totalNew=cd.reduce((s,x)=>s+x.newCust,0);
+  const noResult=cd.filter(x=>x.cost>0&&!x.kps.length);
+  const recs=[];
+  if(bestRoas) recs.push(`🏆 <strong>${esc(bestRoas.c)}</strong> ROAS ${bestRoas.roas.toFixed(2)}x สูงสุด — คุ้มค่าที่สุด พิจารณาเพิ่มงบ`);
+  if(worstRoas && worstRoas.roas<1 && (!bestRoas||worstRoas.c!==bestRoas.c)) recs.push(`⚠️ <strong>${esc(worstRoas.c)}</strong> ROAS ${worstRoas.roas.toFixed(2)}x ต่ำกว่า 1 — ได้ยอดน้อยกว่าเงินที่ลง ควรปรับ creative/กลุ่มเป้าหมาย หรือหยุด`);
+  if(highCpa) recs.push(`💸 <strong>${esc(highCpa.c)}</strong> ต้นทุนต่อลูกค้าใหม่สูงสุด ฿${fmt(Math.round(highCpa.cpa))} — หาทางลด CPA`);
+  if(totalNew) recs.push(`🧑 รวมได้ลูกค้าใหม่ <strong>${fmt(totalNew)}</strong> คนจากทุกแคมเปญ`);
+  noResult.slice(0,3).forEach(x=>recs.push(`📝 <strong>${esc(x.c)}</strong> มีค่าใช้จ่าย ฿${fmt(x.cost)} แต่ยังไม่กรอกผล — เพิ่ม KPI/ผลเพื่อวัด ROI`));
+  if(!recs.length) recs.push('ยังมีข้อมูลไม่พอจะวิเคราะห์ — เลือก KPI และกรอกผลของแต่ละแคมเปญเพิ่ม');
+
   el.innerHTML=`
     <div class="kpi-row">
       <div class="kpi"><div class="kpi-label">ค่าใช้จ่าย Marketing รวม</div><div class="kpi-val col-red">฿${fmt(totalCost)}</div><div class="kpi-sub">${mkt.length} รายการ</div></div>
@@ -1582,14 +1629,23 @@ function renderMpOverview(camps){
     </div>
     <div class="chart-row">
       <div class="chart-card"><h3>ค่าใช้จ่ายแต่ละแคมเปญ</h3><div class="chart-wrap"><canvas id="mpChart"></canvas></div></div>
-      <div class="chart-card"><h3>สรุปแคมเปญ (กดเพื่อดูรายละเอียด)</h3><div style="overflow:auto;max-height:320px"><table class="tbl" style="font-size:12px"><thead><tr><th>แคมเปญ</th><th>KPI</th><th style="text-align:right">ค่าใช้จ่าย</th><th style="text-align:right">ผลหลัก</th></tr></thead><tbody>${
-        camps.map(c=>{ const r=campaignResults[resKey(c)]||{}; const cost=mpCampaignSpend(c); const kps=getKpis(r); const d=kps.length?kpiDerived(kps[0],r,cost):[]; const main=d.length?d[d.length-1]:null; const kpLabel=kps.length?kps.map(k=>(KPI_TYPES[k]||{}).label||k).join(', '):'—'; return `<tr style="cursor:pointer" onclick="mpOpen('${esc(c).replace(/'/g,"\\'")}')"><td>🎯 ${esc(c)}</td><td>${esc(kpLabel)}</td><td style="text-align:right">฿${fmt(cost)}</td><td style="text-align:right">${main?esc(main[0]+': '+main[1]):'—'}</td></tr>`; }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted)">ยังไม่มีแคมเปญ — กด 🎯 สร้างแคมเปญ</td></tr>'
-      }</tbody></table></div></div>
+      <div class="chart-card"><h3>🔎 วิเคราะห์ & ข้อแนะนำ</h3><ul style="font-size:13px;line-height:1.9;padding-left:18px;margin:6px 0 0">${recs.map(r=>'<li>'+r+'</li>').join('')}</ul></div>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">ผลลัพธ์แต่ละแคมเปญ (กดเพื่อดู/แก้)</div>
+      ${camps.length?camps.map(c=>{ const x=cd.find(z=>z.c===c); const r=x.r; const safe=esc(c).replace(/'/g,"\\'");
+        const chips=x.kps.flatMap(kpi=>kpiDerived(kpi,r,x.cost)).map(d=>`<span style="font-size:11px;background:#eef2ff;color:#4338ca;padding:2px 8px;border-radius:10px;font-weight:600">${esc(d[0])}: ${esc(d[1])}</span>`).join(' ');
+        const kpLabel=x.kps.length?x.kps.map(k=>(KPI_TYPES[k]||{}).label||k).join(' · '):'<span style="color:var(--muted)">ยังไม่เลือก KPI</span>';
+        return `<div style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="mpOpen('${safe}')">
+          <div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:600">🎯 ${esc(c)}</div><div style="font-weight:700;color:var(--red)">฿${fmt(x.cost)}</div></div>
+          <div style="font-size:12px;color:var(--muted);margin:2px 0">${kpLabel}${r.objective?' · '+esc(r.objective):''}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">${chips||'<span style="font-size:11px;color:var(--muted)">ยังไม่กรอกผล</span>'}</div>
+        </div>`; }).join(''):'<div style="text-align:center;color:var(--muted)">ยังไม่มีแคมเปญ — กด 🎯 สร้างแคมเปญ</div>'}
     </div>`;
   if(mpChart){mpChart.destroy();mpChart=null;}
   const cv=document.getElementById('mpChart');
   if(cv && spendByCamp.length){
-    mpChart=new Chart(cv.getContext('2d'),{type:'bar',data:{labels:spendByCamp.map(x=>x.c),datasets:[{label:'ค่าใช้จ่าย',data:spendByCamp.map(x=>x.v),backgroundColor:'#2d7a4f',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' ฿'+fmt(c.raw)}}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}});
+    mpChart=new Chart(cv.getContext('2d'),{type:'bar',data:{labels:spendByCamp.map(x=>x.c),datasets:[{label:'ค่าใช้จ่าย',data:spendByCamp.map(x=>x.cost),backgroundColor:'#2d7a4f',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' ฿'+fmt(c.raw)}}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}});
   }
 }
 
@@ -1606,7 +1662,10 @@ function renderMpCampaign(name){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap">
         <div><div style="font-size:16px;font-weight:700">🎯 ${esc(name)}</div>${r.startDate||r.endDate?`<div style="font-size:12px;color:var(--muted);margin-top:2px">📅 ${r.startDate?thDate(r.startDate):'—'} → ${r.endDate?thDate(r.endDate):'—'}</div>`:''}</div>
-        <button class="btn btn-primary btn-sm" onclick="openModalMkt('${safe}')">+ เพิ่มค่าใช้จ่าย</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="openModalMkt('${safe}')">+ เพิ่มค่าใช้จ่าย</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCampaign('${safe}')">🗑 ลบแคมเปญ</button>
+        </div>
       </div>
       <div class="form-grid">
         <div class="form-group full"><label class="fl">Objective (วัตถุประสงค์)</label><input type="text" id="mp-obj" value="${esc(r.objective||'')}" placeholder="เช่น เพิ่มลูกค้าใหม่ช่วงเปิดสาขา / ดัน awareness สินค้าใหม่"></div>
