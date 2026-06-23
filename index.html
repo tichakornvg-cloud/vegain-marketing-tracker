@@ -1649,7 +1649,7 @@ function renderMpOverview(camps){
     </div>
     ${tiles?`<div class="card"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📊 ผลรวม KPI ทุกแคมเปญ</div><div class="kpi-row">${tiles}</div></div>`:''}
     <div class="chart-row">
-      <div class="chart-card"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">เทียบแคมเปญ <select onchange="mpSetMetric(this.value)" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border)">${Object.entries(MP_METRICS).map(([k,m])=>`<option value="${k}"${mpMetric===k?' selected':''}>${m.label}</option>`).join('')}</select></h3><div class="chart-wrap"><canvas id="mpChart"></canvas></div></div>
+      <div class="chart-card"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">สัดส่วนตามแคมเปญ <select onchange="mpSetMetric(this.value)" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border)">${Object.entries(MP_METRICS).map(([k,m])=>`<option value="${k}"${mpMetric===k?' selected':''}>${m.label}</option>`).join('')}</select></h3><div class="chart-wrap"><canvas id="mpChart"></canvas></div></div>
       <div class="chart-card"><h3>🔎 วิเคราะห์ & ข้อแนะนำ</h3><ul style="font-size:13px;line-height:1.9;padding-left:18px;margin:6px 0 0">${recs.map(r=>'<li>'+r+'</li>').join('')}</ul></div>
     </div>
     <div class="card">
@@ -1666,8 +1666,8 @@ function renderMpOverview(camps){
   if(mpChart){mpChart.destroy();mpChart=null;}
   const cv=document.getElementById('mpChart');
   if(cv && chartRows.length){
-    const isMoney=M.unit==='฿';
-    mpChart=new Chart(cv.getContext('2d'),{type:'bar',data:{labels:chartRows.map(x=>x.c),datasets:[{label:M.label,data:chartRows.map(x=>x.v),backgroundColor:M.color,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmtM(mpMetric,c.raw)}}},scales:{x:{beginAtZero:true,ticks:{callback:v=>isMoney?'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v):v}}}}});
+    const tot=chartRows.reduce((s,x)=>s+x.v,0);
+    mpChart=new Chart(cv.getContext('2d'),{type:'doughnut',data:{labels:chartRows.map(x=>x.c),datasets:[{data:chartRows.map(x=>x.v),backgroundColor:chartRows.map((_,i)=>PALETTE[i%PALETTE.length]),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:8}},tooltip:{callbacks:{label:c=>' '+fmtM(mpMetric,c.raw)+' ('+(tot?(c.raw/tot*100).toFixed(1):0)+'%)'}}}}});
   } else if(cv){ cv.parentElement.innerHTML='<div style="text-align:center;color:var(--muted);padding-top:60px;font-size:13px">ยังไม่มีข้อมูลของตัวชี้วัดนี้</div>'; }
 }
 
