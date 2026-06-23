@@ -1443,7 +1443,19 @@ function num0(v){ return parseFloat(v)||0; }
 function resKey(name){ return (name||'').replace(/[.#$\[\]\/]/g,'_').replace(/\s+/g,'_') || '_'; }
 let mpView='overview';
 let mpMonth='';   // '' = ทั้งปี
+let mpMetric='cost';
 let mpChart=null;
+const MP_METRICS={
+  cost:{label:'💸 ค่าใช้จ่าย', unit:'฿', color:'#ef4444', val:x=>x.cost},
+  newCust:{label:'🧑 ลูกค้าใหม่', unit:'คน', color:'#2d7a4f', val:x=>x.kps.includes('acquisition')?num0(x.r.newCust):0},
+  leads:{label:'📝 Leads', unit:'คน', color:'#f59e0b', val:x=>(x.kps.includes('leads')||x.kps.includes('trial'))?num0(x.r.leads):0},
+  triers:{label:'🥤 ผู้มาชิม', unit:'คน', color:'#14b8a6', val:x=>x.kps.includes('trial')?num0(x.r.triers):0},
+  followers:{label:'👥 ผู้ติดตามใหม่', unit:'คน', color:'#3b82f6', val:x=>x.kps.includes('influencer')?num0(x.r.newFollowers):0},
+  redeem:{label:'🎟️ Redeem', unit:'คน', color:'#8b5cf6', val:x=>x.kps.includes('redemption')?num0(x.r.redeemCount):0},
+  sales:{label:'💰 ยอดขาย', unit:'฿', color:'#16a34a', val:x=>x.sales},
+  roas:{label:'📈 ROAS', unit:'x', color:'#0ea5e9', val:x=>x.roas||0},
+};
+function mpSetMetric(v){ mpMetric=v; renderMktPerf(); }
 function inMpMonth(e){ return !mpMonth || monthOf(e.date)===mpMonth; }
 
 const KPI_TYPES={
@@ -1620,6 +1632,14 @@ function renderMpOverview(camps){
   noResult.slice(0,3).forEach(x=>recs.push(`📝 <strong>${esc(x.c)}</strong> มีค่าใช้จ่าย ฿${fmt(x.cost)} แต่ยังไม่กรอกผล — เพิ่ม KPI/ผลเพื่อวัด ROI`));
   if(!recs.length) recs.push('ยังมีข้อมูลไม่พอจะวิเคราะห์ — เลือก KPI และกรอกผลของแต่ละแคมเปญเพิ่ม');
 
+  // aggregate KPI tiles across all campaigns
+  const fmtM=(key,v)=>{ const u=(MP_METRICS[key]||{}).unit; return u==='฿'?'฿'+fmt(v):u==='x'?v.toFixed(2)+'x':fmt(v)+(u?' '+u:''); };
+  const tileKeys=['newCust','leads','triers','followers','redeem','sales'];
+  const tiles=tileKeys.map(key=>{ const m=MP_METRICS[key]; const sum=cd.reduce((s,x)=>s+m.val(x),0); if(sum<=0) return ''; const best=cd.slice().sort((a,b)=>m.val(b)-m.val(a))[0]; return `<div class="kpi"><div class="kpi-label">${m.label} (รวม)</div><div class="kpi-val" style="font-size:18px;color:${m.color}">${fmtM(key,sum)}</div><div class="kpi-sub">🏆 ${esc(best.c)} · ${fmtM(key,m.val(best))}</div></div>`; }).filter(Boolean).join('');
+
+  const M=MP_METRICS[mpMetric]||MP_METRICS.cost;
+  const chartRows=cd.map(x=>({c:x.c,v:M.val(x)})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+
   el.innerHTML=`
     <div class="kpi-row">
       <div class="kpi"><div class="kpi-label">ค่าใช้จ่าย Marketing รวม</div><div class="kpi-val col-red">฿${fmt(totalCost)}</div><div class="kpi-sub">${mkt.length} รายการ</div></div>
@@ -1627,8 +1647,9 @@ function renderMpOverview(camps){
       <div class="kpi"><div class="kpi-label">ยอดขายจากแคมเปญ</div><div class="kpi-val col-green">฿${fmt(totalSales)}</div></div>
       <div class="kpi"><div class="kpi-label">ROAS รวม</div><div class="kpi-val ${roas>=1?'col-green':'col-red'}">${roas.toFixed(2)}x</div></div>
     </div>
+    ${tiles?`<div class="card"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📊 ผลรวม KPI ทุกแคมเปญ</div><div class="kpi-row">${tiles}</div></div>`:''}
     <div class="chart-row">
-      <div class="chart-card"><h3>ค่าใช้จ่ายแต่ละแคมเปญ</h3><div class="chart-wrap"><canvas id="mpChart"></canvas></div></div>
+      <div class="chart-card"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">เทียบแคมเปญ <select onchange="mpSetMetric(this.value)" style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border)">${Object.entries(MP_METRICS).map(([k,m])=>`<option value="${k}"${mpMetric===k?' selected':''}>${m.label}</option>`).join('')}</select></h3><div class="chart-wrap"><canvas id="mpChart"></canvas></div></div>
       <div class="chart-card"><h3>🔎 วิเคราะห์ & ข้อแนะนำ</h3><ul style="font-size:13px;line-height:1.9;padding-left:18px;margin:6px 0 0">${recs.map(r=>'<li>'+r+'</li>').join('')}</ul></div>
     </div>
     <div class="card">
@@ -1644,9 +1665,10 @@ function renderMpOverview(camps){
     </div>`;
   if(mpChart){mpChart.destroy();mpChart=null;}
   const cv=document.getElementById('mpChart');
-  if(cv && spendByCamp.length){
-    mpChart=new Chart(cv.getContext('2d'),{type:'bar',data:{labels:spendByCamp.map(x=>x.c),datasets:[{label:'ค่าใช้จ่าย',data:spendByCamp.map(x=>x.cost),backgroundColor:'#2d7a4f',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' ฿'+fmt(c.raw)}}},scales:{x:{beginAtZero:true,ticks:{callback:v=>'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v)}}}}});
-  }
+  if(cv && chartRows.length){
+    const isMoney=M.unit==='฿';
+    mpChart=new Chart(cv.getContext('2d'),{type:'bar',data:{labels:chartRows.map(x=>x.c),datasets:[{label:M.label,data:chartRows.map(x=>x.v),backgroundColor:M.color,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmtM(mpMetric,c.raw)}}},scales:{x:{beginAtZero:true,ticks:{callback:v=>isMoney?'฿'+(v>=1000?(v/1000).toFixed(0)+'k':v):v}}}}});
+  } else if(cv){ cv.parentElement.innerHTML='<div style="text-align:center;color:var(--muted);padding-top:60px;font-size:13px">ยังไม่มีข้อมูลของตัวชี้วัดนี้</div>'; }
 }
 
 function renderMpCampaign(name){
