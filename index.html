@@ -293,8 +293,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
         <button class="btn btn-primary btn-sm" onclick="openModalMkt()">+ เพิ่มค่าใช้จ่าย Marketing</button>
       </div>
     </div>
-    <div class="pill-row" style="margin-bottom:14px">
+    <div class="pill-row" style="margin-bottom:10px">
       <div id="mp-subnav" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div class="pill-row" style="margin-bottom:14px">
+      <span class="pill-label">เดือน:</span>
+      <div id="mp-months" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     </div>
     <div id="mp-content"></div>
   </div>
@@ -1432,7 +1436,9 @@ function exportCSV() {
 function num0(v){ return parseFloat(v)||0; }
 function resKey(name){ return (name||'').replace(/[.#$\[\]\/]/g,'_').replace(/\s+/g,'_') || '_'; }
 let mpView='overview';
+let mpMonth='';   // '' = ทั้งปี
 let mpChart=null;
+function inMpMonth(e){ return !mpMonth || monthOf(e.date)===mpMonth; }
 
 const KPI_TYPES={
   acquisition:{label:'🧑 Acquire ลูกค้าใหม่', fields:[['targetCust','เป้า ลูกค้าใหม่ (คน)'],['newCust','ลูกค้าใหม่จริง (คน)'],['potential','Potential (คน)']]},
@@ -1460,7 +1466,7 @@ function kpiDerived(kpi,r,cost){
   }
 }
 
-function mpCampaignSpend(name){ return appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name).reduce((s,e)=>s+e.amount,0); }
+function mpCampaignSpend(name){ return appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name&&inMpMonth(e)).reduce((s,e)=>s+e.amount,0); }
 function mpCampaigns(){
   const set=new Set();
   appData.forEach(e=>{ if(e.type==='cost'&&costGroup(e)==='marketing'&&e.campaign) set.add(e.campaign); });
@@ -1490,6 +1496,20 @@ function renderMktPerf(){
   sub.appendChild(chip('overview','📊 ภาพรวม'));
   sub.appendChild(chip('definition','📖 Definition'));
   camps.forEach(c=>sub.appendChild(chip(c,'🎯 '+c)));
+
+  // month pills
+  const mEl=document.getElementById('mp-months');
+  if(mEl){
+    const months=[...new Set(appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing').map(e=>monthOf(e.date)))].filter(Boolean).sort();
+    if(mpMonth && !months.includes(mpMonth)) mpMonth='';
+    mEl.innerHTML='';
+    const yrs=[...new Set(months.map(m=>m.slice(0,4)))];
+    const mc=(key,label)=>{ const b=document.createElement('button'); b.className='pill'+(mpMonth===key?' sel':''); b.textContent=label; b.onclick=()=>{mpMonth=key;renderMktPerf();}; return b; };
+    mEl.appendChild(mc('','📅 ทั้งปี'+(yrs.length===1?' '+thYear(yrs[0]):'')));
+    months.forEach(m=>mEl.appendChild(mc(m,thMonth(m))));
+    mEl.parentElement.style.display = (mpView==='definition') ? 'none' : '';
+  }
+
   if(mpView==='overview') renderMpOverview(camps);
   else if(mpView==='definition') renderMpDefinition();
   else renderMpCampaign(mpView);
@@ -1541,7 +1561,7 @@ function renderMpDefinition(){
 
 function renderMpOverview(camps){
   const el=document.getElementById('mp-content');
-  const mkt=appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing');
+  const mkt=appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&inMpMonth(e));
   const totalCost=mkt.reduce((s,e)=>s+e.amount,0);
   let totalSales=0; camps.forEach(c=>{ const r=campaignResults[resKey(c)]; if(r&&r.kpi==='sales') totalSales+=num0(r.sales); });
   const roas=totalCost?totalSales/totalCost:0;
@@ -1570,18 +1590,20 @@ function renderMpCampaign(name){
   const el=document.getElementById('mp-content');
   const r=campaignResults[resKey(name)]||{};
   const cost=mpCampaignSpend(name);
-  const exps=appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const exps=appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name&&inMpMonth(e)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const kpiOpts='<option value="">— เลือก KPI —</option>'+Object.entries(KPI_TYPES).map(([k,v])=>`<option value="${k}"${r.kpi===k?' selected':''}>${v.label}</option>`).join('');
   const derived=kpiDerived(r.kpi,r,cost);
   const safe=esc(name).replace(/'/g,"\\'");
   el.innerHTML=`
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap">
-        <div style="font-size:16px;font-weight:700">🎯 ${esc(name)}</div>
+        <div><div style="font-size:16px;font-weight:700">🎯 ${esc(name)}</div>${r.startDate||r.endDate?`<div style="font-size:12px;color:var(--muted);margin-top:2px">📅 ${r.startDate?thDate(r.startDate):'—'} → ${r.endDate?thDate(r.endDate):'—'}</div>`:''}</div>
         <button class="btn btn-primary btn-sm" onclick="openModalMkt('${safe}')">+ เพิ่มค่าใช้จ่าย</button>
       </div>
       <div class="form-grid">
         <div class="form-group full"><label class="fl">Objective (วัตถุประสงค์)</label><input type="text" id="mp-obj" value="${esc(r.objective||'')}" placeholder="เช่น เพิ่มลูกค้าใหม่ช่วงเปิดสาขา / ดัน awareness สินค้าใหม่"></div>
+        <div class="form-group"><label class="fl">ระยะเวลา: เริ่ม</label><input type="date" id="mp-start" value="${esc(r.startDate||'')}"></div>
+        <div class="form-group"><label class="fl">ระยะเวลา: สิ้นสุด</label><input type="date" id="mp-end" value="${esc(r.endDate||'')}"></div>
         <div class="form-group"><label class="fl">ค่าใช้จ่ายรวม (จาก log)</label><div class="kpi-val col-red" style="font-size:18px">฿${fmt(cost)}</div></div>
         <div class="form-group"><label class="fl">KPI</label><select id="mp-kpi" onchange="renderMpKpiFields()">${kpiOpts}</select></div>
         <div class="form-group full"><label class="fl">ผลลัพธ์ตาม KPI</label><div id="mp-kpi-fields" class="form-grid" style="padding:0"></div></div>
@@ -1609,7 +1631,7 @@ function saveCampaignMeta(name){
   if(!resultsRef) return;
   const kpi=document.getElementById('mp-kpi').value;
   const fields=(KPI_TYPES[kpi]||{}).fields||[];
-  const data={ name, objective:document.getElementById('mp-obj').value.trim(), kpi, note:document.getElementById('mp-note').value.trim(), updatedBy:currentUser||'' };
+  const data={ name, objective:document.getElementById('mp-obj').value.trim(), kpi, startDate:document.getElementById('mp-start').value, endDate:document.getElementById('mp-end').value, note:document.getElementById('mp-note').value.trim(), updatedBy:currentUser||'' };
   fields.forEach(([k])=>{ const elf=document.getElementById('mp-f-'+k); data[k]=elf?num0(elf.value):0; });
   resultsRef.child(resKey(name)).set(data).then(()=>showToast('✅ บันทึกแคมเปญแล้ว')).catch(err=>showToast('❌ '+err.message,true));
 }
