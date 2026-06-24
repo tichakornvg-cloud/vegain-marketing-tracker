@@ -296,6 +296,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
       <div style="font-size:16px;font-weight:700">📣 Marketing Performance</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="newCampaignPrompt()">🎯 สร้างแคมเปญ</button>
+        <button class="btn btn-ghost btn-sm" onclick="openMpImport()">📥 Import แคมเปญ</button>
         <button class="btn btn-primary btn-sm" onclick="openModalMkt()">+ เพิ่มค่าใช้จ่าย Marketing</button>
       </div>
     </div>
@@ -480,6 +481,27 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
   <div class="modal-btns">
     <button class="btn btn-ghost" onclick="closeImport()">ยกเลิก</button>
     <button class="btn btn-primary" id="import-confirm-btn" onclick="confirmImport()" style="display:none">💾 นำเข้าทั้งหมด</button>
+  </div>
+</div>
+</div>
+
+<!-- ══ MARKETING IMPORT MODAL ══ -->
+<div class="overlay" id="mp-import-overlay">
+<div class="modal" onclick="event.stopPropagation()" style="max-width:760px">
+  <div class="modal-title">📥 นำเข้าแคมเปญ Marketing</div>
+  <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px">
+    ไฟล์ <strong>.xlsx / .csv</strong> รูปแบบ 1 แถว = 1 แคมเปญ (มีหัวคอลัมน์ Campaign, Spend, KPI, ผลต่างๆ).<br>
+    ยังไม่มีไฟล์? <a href="marketing-template.xlsx" download style="color:var(--green);font-weight:600">⬇ ดาวน์โหลด template</a> (เปิดใน Excel หรือ copy ไป Google Sheet) — ดูแท็บ "คำอธิบาย" ในไฟล์ประกอบ
+  </div>
+  <input type="file" id="mp-import-file" accept=".xlsx,.xls,.csv" onchange="handleMpImportFile(event)" style="margin-bottom:12px">
+  <div id="mp-import-status" style="font-size:13px;margin-bottom:10px"></div>
+  <div id="mp-import-preview" style="max-height:340px;overflow:auto;display:none">
+    <table class="tbl" style="font-size:12px"><thead><tr><th>แคมเปญ</th><th>KPI</th><th style="text-align:right">ค่าใช้จ่าย</th><th>ผลหลัก</th></tr></thead>
+    <tbody id="mp-import-preview-body"></tbody></table>
+  </div>
+  <div class="modal-btns">
+    <button class="btn btn-ghost" onclick="closeMpImport()">ยกเลิก</button>
+    <button class="btn btn-primary" id="mp-import-confirm" onclick="confirmMpImport()" style="display:none">💾 นำเข้าทั้งหมด</button>
   </div>
 </div>
 </div>
@@ -1446,6 +1468,7 @@ let mpMonth='';   // '' = ทั้งปี
 let mpMetric='cost';
 let mpChart=null;
 let mpCharts=[];
+let mpImportRows=[];
 const MP_METRICS={
   cost:{label:'💸 ค่าใช้จ่าย', unit:'฿', color:'#ef4444', val:x=>x.cost},
   newCust:{label:'🧑 ลูกค้าใหม่', unit:'คน', color:'#2d7a4f', val:x=>x.kps.includes('acquisition')?num0(x.r.newCust):0},
@@ -1733,6 +1756,91 @@ function saveCampaignMeta(name){
   const keys=new Set(); kpis.forEach(k=>((KPI_TYPES[k]||{}).fields||[]).forEach(([key])=>keys.add(key)));
   keys.forEach(key=>{ const elf=document.getElementById('mp-f-'+key); if(elf) data[key]=num0(elf.value); });
   resultsRef.child(resKey(name)).set(data).then(()=>showToast('✅ บันทึกแคมเปญแล้ว')).catch(err=>showToast('❌ '+err.message,true));
+}
+
+// ── Marketing campaign import ──
+const MP_KPI_TOKENS={acquire:'acquisition',acquisition:'acquisition',redemption:'redemption',redeem:'redemption',sales:'sales',roas:'sales',awareness:'awareness',reach:'awareness',engagement:'engagement',leads:'leads',lead:'leads',trial:'trial',booth:'trial','บูทชิม':'trial',influencer:'influencer',followers:'influencer',follower:'influencer'};
+function parseKpiList(s){ if(!s)return[]; return String(s).split(/[,/|]+/).map(t=>MP_KPI_TOKENS[t.trim().toLowerCase()]).filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i); }
+function mpHeaderField(h){
+  h=(h||'').toString().trim().toLowerCase(); const has=s=>h.includes(s);
+  if(has('campaign')||has('แคมเปญ')) return 'campaign';
+  if(has('objective')||has('วัตถุ')) return 'objective';
+  if(has('start')||has('เริ่ม')) return 'startDate';
+  if(has('end')||has('สิ้นสุด')) return 'endDate';
+  if(has('spend')||has('ค่าใช้จ่าย')||has('งบ')) return 'spend';
+  if(has('branch')||has('สาขา')) return 'branch';
+  if(has('vendor')||has('ร้าน')||has('แพลตฟอร์ม')) return 'vendor';
+  if(has('kpi')) return 'kpi';
+  if(has('potential')) return 'potential';
+  if(has('target')||has('เป้า')) return 'targetCust';
+  if((has('redeem')&&has('base'))||has('ฐาน')) return 'redeemBase';
+  if(has('redeem')) return 'redeemCount';
+  if(has('triers')||has('ชิม')) return 'triers';
+  if(has('samples')||has('ตัวอย่าง')) return 'samples';
+  if(has('buyers')||has('ซื้อทันที')) return 'buyers';
+  if(has('followers')||has('ผู้ติดตาม')) return 'newFollowers';
+  if(has('reach')) return 'reach';
+  if(has('impressions')) return 'impressions';
+  if(has('engagement')) return 'engagement';
+  if(has('clicks')) return 'clicks';
+  if(has('leads')||has('lead')) return 'leads';
+  if(has('sales')||has('ยอดขาย')) return 'sales';
+  if(has('note')||has('หมายเหตุ')) return 'note';
+  if(has('new')||has('ลูกค้าใหม่')) return 'newCust';
+  return null;
+}
+function openMpImport(){ document.getElementById('mp-import-file').value=''; document.getElementById('mp-import-status').textContent=''; document.getElementById('mp-import-preview').style.display='none'; document.getElementById('mp-import-preview-body').innerHTML=''; document.getElementById('mp-import-confirm').style.display='none'; mpImportRows=[]; document.getElementById('mp-import-overlay').classList.add('open'); }
+function closeMpImport(){ document.getElementById('mp-import-overlay').classList.remove('open'); }
+function handleMpImportFile(ev){
+  const file=ev.target.files[0]; if(!file)return; const st=document.getElementById('mp-import-status');
+  if(typeof XLSX==='undefined'){ st.textContent='❌ โหลดไลบรารีอ่าน Excel ไม่สำเร็จ'; return; }
+  st.textContent='⏳ กำลังอ่านไฟล์...';
+  const reader=new FileReader();
+  reader.onload=e=>{ try{ const wb=XLSX.read(e.target.result,{type:'array',cellDates:true}); const ws=wb.Sheets[wb.SheetNames[0]]; const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}); mpImportRows=parseMpSheet(grid); renderMpImportPreview(); }catch(err){ st.textContent='❌ '+err.message; } };
+  reader.readAsArrayBuffer(file);
+}
+function parseMpSheet(grid){
+  if(!grid.length) return [];
+  let hi=grid.findIndex(row=>(row||[]).some(c=>mpHeaderField(c)==='campaign')); if(hi<0) hi=0;
+  const cols=(grid[hi]||[]).map(mpHeaderField); const out=[];
+  for(let r=hi+1;r<grid.length;r++){
+    const row=grid[r]||[]; const o={}; cols.forEach((f,i)=>{ if(f) o[f]=row[i]; });
+    const camp=impTxt(o.campaign); if(!camp) continue;
+    const N=k=>impNum(o[k]);
+    let kpis=parseKpiList(o.kpi);
+    if(!kpis.length){ if(N('newCust')||N('targetCust'))kpis.push('acquisition'); if(N('redeemCount')||N('redeemBase'))kpis.push('redemption'); if(N('triers')||N('buyers'))kpis.push('trial'); if(N('newFollowers'))kpis.push('influencer'); if(N('reach')||N('impressions'))kpis.push('awareness'); if(N('engagement')||N('clicks'))kpis.push('engagement'); if(N('leads'))kpis.push('leads'); if(N('sales')&&!kpis.includes('influencer'))kpis.push('sales'); kpis=[...new Set(kpis)]; }
+    out.push({ campaign:camp, objective:impTxt(o.objective), startDate:impDate(o.startDate), endDate:impDate(o.endDate),
+      spend:N('spend'), branch:impTxt(o.branch).includes('2')?'b2':'b1', vendor:impTxt(o.vendor), kpis,
+      newCust:N('newCust'),potential:N('potential'),targetCust:N('targetCust'),redeemBase:N('redeemBase'),redeemCount:N('redeemCount'),
+      triers:N('triers'),samples:N('samples'),leads:N('leads'),buyers:N('buyers'),newFollowers:N('newFollowers'),
+      reach:N('reach'),impressions:N('impressions'),engagement:N('engagement'),clicks:N('clicks'),sales:N('sales'),note:impTxt(o.note) });
+  }
+  return out;
+}
+function renderMpImportPreview(){
+  const st=document.getElementById('mp-import-status'); const body=document.getElementById('mp-import-preview-body');
+  if(!mpImportRows.length){ st.textContent='⚠️ ไม่พบแคมเปญ — ตรวจว่ามีคอลัมน์ Campaign'; document.getElementById('mp-import-preview').style.display='none'; document.getElementById('mp-import-confirm').style.display='none'; return; }
+  st.innerHTML=`✅ อ่านได้ <strong>${mpImportRows.length}</strong> แคมเปญ — ตรวจสอบก่อนนำเข้า`;
+  body.innerHTML=mpImportRows.map(o=>{ const d=o.kpis.length?kpiDerived(o.kpis[0],o,o.spend):[]; const main=d.length?d[d.length-1]:null; return `<tr><td>${esc(o.campaign)}</td><td>${o.kpis.map(k=>(KPI_TYPES[k]||{}).label||k).join(', ')||'—'}</td><td style="text-align:right">฿${fmt(o.spend)}</td><td>${main?esc(main[0]+': '+main[1]):'—'}</td></tr>`; }).join('');
+  document.getElementById('mp-import-preview').style.display='block';
+  document.getElementById('mp-import-confirm').style.display='';
+}
+function confirmMpImport(){
+  if(!mpImportRows.length||!resultsRef||!entriesRef) return;
+  if(!currentUser){ changeUser(); showToast('⚠️ กรุณาเลือกชื่อผู้ใช้ก่อน',true); return; }
+  if(!confirm('นำเข้า '+mpImportRows.length+' แคมเปญ? (สร้างค่าใช้จ่าย + บันทึกผล KPI)')) return;
+  const btn=document.getElementById('mp-import-confirm'); btn.disabled=true; btn.textContent='กำลังนำเข้า...';
+  const entryUpd={}; const proms=[];
+  mpImportRows.forEach(o=>{
+    if(o.spend>0){ const id=uid()+Math.random().toString(36).slice(2,5); entryUpd[id]={type:'cost',group:'marketing',cat:'',campaign:o.campaign,amount:o.spend,date:o.startDate||new Date().toISOString().slice(0,10),branch:o.branch,vendor:o.vendor,account:'',desc:'นำเข้าจากชีต Marketing',note:'',createdBy:currentUser,source:'mp-import'}; }
+    const res={name:o.campaign,objective:o.objective,startDate:o.startDate||'',endDate:o.endDate||'',kpis:o.kpis,kpi:o.kpis[0]||'',note:o.note,deleted:false,updatedBy:currentUser};
+    ['newCust','potential','targetCust','redeemBase','redeemCount','triers','samples','leads','buyers','newFollowers','reach','impressions','engagement','clicks','sales'].forEach(k=>{ res[k]=num0(o[k]); });
+    proms.push(resultsRef.child(resKey(o.campaign)).update(res));
+  });
+  Promise.all([Object.keys(entryUpd).length?entriesRef.update(entryUpd):Promise.resolve(),...proms])
+    .then(()=>{ showToast('✅ นำเข้า '+mpImportRows.length+' แคมเปญแล้ว'); closeMpImport(); mpView='overview'; renderMktPerf(); })
+    .catch(err=>showToast('❌ '+err.message,true))
+    .finally(()=>{ btn.disabled=false; btn.textContent='💾 นำเข้าทั้งหมด'; });
 }
 
 
