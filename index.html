@@ -1512,6 +1512,17 @@ function kpiDerived(kpi,r,cost){
 }
 
 function mpCampaignSpend(name){ return appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name&&inMpMonth(e)).reduce((s,e)=>s+e.amount,0); }
+// active in selected month = has spend that month OR its date range overlaps the month
+function mpActiveInMonth(name){
+  if(!mpMonth) return true;
+  if(appData.some(e=>e.type==='cost'&&costGroup(e)==='marketing'&&(e.campaign||'')===name&&monthOf(e.date)===mpMonth)) return true;
+  const r=campaignResults[resKey(name)]||{};
+  const s=monthOf(r.startDate), en=monthOf(r.endDate);
+  if(s&&en) return s<=mpMonth && mpMonth<=en;
+  if(s) return s===mpMonth;
+  if(en) return en===mpMonth;
+  return false;
+}
 function isCampDeleted(name){ const r=campaignResults[resKey(name)]; return !!(r&&r.deleted); }
 function mpCampaigns(){
   const set=new Set();
@@ -1632,6 +1643,7 @@ function renderMpDefinition(){
 
 function renderMpOverview(camps){
   const el=document.getElementById('mp-content');
+  if(mpMonth) camps=camps.filter(mpActiveInMonth);   // month selected → only campaigns active that month
   const mkt=appData.filter(e=>e.type==='cost'&&costGroup(e)==='marketing'&&inMpMonth(e));
   const totalCost=mkt.reduce((s,e)=>s+e.amount,0);
   // per-campaign metrics
@@ -1656,6 +1668,7 @@ function renderMpOverview(camps){
   if(highCpa) recs.push(`💸 <strong>${esc(highCpa.c)}</strong> ต้นทุนต่อลูกค้าใหม่สูงสุด ฿${fmt(Math.round(highCpa.cpa))} — หาทางลด CPA`);
   if(totalNew) recs.push(`🧑 รวมได้ลูกค้าใหม่ <strong>${fmt(totalNew)}</strong> คนจากทุกแคมเปญ`);
   noResult.slice(0,3).forEach(x=>recs.push(`📝 <strong>${esc(x.c)}</strong> มีค่าใช้จ่าย ฿${fmt(x.cost)} แต่ยังไม่กรอกผล — เพิ่ม KPI/ผลเพื่อวัด ROI`));
+  if(mpMonth) recs.unshift('📅 กรองเฉพาะแคมเปญที่ active เดือน '+thMonth(mpMonth)+' — ค่าใช้จ่ายเป็นยอดเฉพาะเดือนนี้ ส่วนผล KPI เป็นค่ารวมทั้งแคมเปญ (ไม่ได้แยกรายเดือน)');
   if(!recs.length) recs.push('ยังมีข้อมูลไม่พอจะวิเคราะห์ — เลือก KPI และกรอกผลของแต่ละแคมเปญเพิ่ม');
 
   const fmtM=(key,v)=>{ const u=(MP_METRICS[key]||{}).unit; return u==='฿'?'฿'+fmt(v):u==='x'?v.toFixed(2)+'x':fmt(v)+(u?' '+u:''); };
