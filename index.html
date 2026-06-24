@@ -357,6 +357,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
           <option value="b1">สาขา 1</option>
           <option value="b2">สาขา 2</option>
         </select>
+        <input type="text" id="filter-search" oninput="renderLog()" placeholder="🔍 ค้นหา..." style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border);min-width:160px">
         <button class="btn btn-primary btn-sm" onclick="openImport()">📥 Import Excel</button>
         <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
         <button class="btn btn-primary btn-sm" onclick="openModal()">+ เพิ่มรายการ</button>
@@ -1317,6 +1318,7 @@ function renderLog() {
   const fType   = document.getElementById('filter-type').value;
   const fCat    = document.getElementById('filter-cat').value;
   const fBranch = document.getElementById('filter-branch').value;
+  const fQ = ((document.getElementById('filter-search')||{}).value||'').trim().toLowerCase();
 
   let rows = [...appData];
   if (fMonth) rows=rows.filter(e=>monthOf(e.date)===fMonth);
@@ -1324,6 +1326,11 @@ function renderLog() {
   if (fCat==='__rev__') rows=rows.filter(e=>e.type==='revenue');
   else if (fCat) rows=rows.filter(e=>e.type==='cost' && costGroup(e)===fCat);
   if (fBranch) rows=rows.filter(e=>(e.branch||'b1')===fBranch);
+  if (fQ) rows=rows.filter(e=>{
+    const isRev=e.type==='revenue';
+    const hay=[e.desc,e.vendor,e.campaign,e.note,e.createdBy,thDate(e.date),(isRev?revChannel(e):groupLabel(costGroup(e))),(isRev?'':costSubLabel(e)),branchLabel(e.branch),accountLabel(e.account)].join(' ').toLowerCase();
+    return hay.includes(fQ);
+  });
 
   const empty = document.getElementById('log-empty');
   const table = document.getElementById('log-table');
