@@ -1020,6 +1020,15 @@ function renderBranchPills() {
   });
 }
 
+function filterDetail(){
+  const q=(document.getElementById('detail-search')||{}).value||'';
+  const t=q.trim().toLowerCase();
+  const rows=document.querySelectorAll('#detail-body .dl-row');
+  let shown=0;
+  rows.forEach(r=>{ const match=!t || r.textContent.toLowerCase().includes(t); r.style.display=match?'':'none'; if(match)shown++; });
+  const none=document.getElementById('detail-none'); if(none) none.style.display=(rows.length && shown===0)?'block':'none';
+}
+
 function renderDashboard() {
   const months = [...new Set(appData.map(e => monthOf(e.date)))].filter(Boolean).sort();
   renderGroupPills(); renderBranchPills();
@@ -1273,12 +1282,16 @@ function renderDashboard() {
     const rows=[...view].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const colHead=isRevView?'<th>วันที่</th><th>ช่องทาง</th><th>สาขา</th><th style="text-align:right">จำนวน</th>':'<th>วันที่</th><th>รายละเอียด</th><th>ผู้รับ/ร้านค้า</th><th>สาขา</th><th style="text-align:right">จำนวน</th>';
     const body=rows.slice(0,500).map(e=>{
-      if(isRevView) return `<tr><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(revChannel(e))}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--green)">฿${fmt(e.amount)}</td></tr>`;
-      return `<tr><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(e.desc||'—')}${e.cat?'<br><span style="font-size:11px;color:var(--muted)">'+esc(e.cat)+'</span>':''}</td><td>${esc(e.vendor||'—')}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--red)">฿${fmt(e.amount)}</td></tr>`;
+      if(isRevView) return `<tr class="dl-row"><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(revChannel(e))}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--green)">฿${fmt(e.amount)}</td></tr>`;
+      return `<tr class="dl-row"><td style="white-space:nowrap">${thDate(e.date)}</td><td>${esc(e.desc||'—')}${e.cat?'<br><span style="font-size:11px;color:var(--muted)">'+esc(e.cat)+'</span>':''}</td><td>${esc(e.vendor||'—')}</td><td>${esc(branchLabel(e.branch))}</td><td style="text-align:right;font-weight:600;color:var(--red)">฿${fmt(e.amount)}</td></tr>`;
     }).join('');
-    const detailCard=`<div class="card" style="overflow-x:auto"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:14px">📋 รายการละเอียด — ${esc(viewName)} (${rows.length} รายการ)</div>
-      <table class="tbl"><thead><tr>${colHead}</tr></thead><tbody>${body||'<tr><td colspan="5" style="text-align:center;color:var(--muted)">ไม่มีรายการ</td></tr>'}</tbody></table>
-      ${rows.length>500?`<div style="font-size:12px;color:var(--muted);text-align:center;margin-top:8px">แสดง 500 รายการแรกจาก ${rows.length}</div>`:''}</div>`;
+    const detailCard=`<div class="card" style="overflow-x:auto"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">📋 รายการละเอียด — ${esc(viewName)} (${rows.length} รายการ)</div>
+        <input type="text" id="detail-search" oninput="filterDetail()" placeholder="🔍 ค้นหา (รายละเอียด/ร้านค้า/วันที่)..." style="padding:7px 10px;font-size:12px;border-radius:8px;border:1px solid var(--border);min-width:240px">
+      </div>
+      <table class="tbl"><thead><tr>${colHead}</tr></thead><tbody id="detail-body">${body||'<tr><td colspan="5" style="text-align:center;color:var(--muted)">ไม่มีรายการ</td></tr>'}</tbody></table>
+      <div id="detail-none" style="display:none;font-size:13px;color:var(--muted);text-align:center;margin-top:10px">ไม่พบรายการที่ค้นหา</div>
+      ${rows.length>500?`<div style="font-size:12px;color:var(--muted);text-align:center;margin-top:8px">แสดง 500 รายการแรกจาก ${rows.length} (ค้นหาเฉพาะ 500 รายการนี้)</div>`:''}</div>`;
     extra.innerHTML=hiCard+detailCard;
   }
 }
