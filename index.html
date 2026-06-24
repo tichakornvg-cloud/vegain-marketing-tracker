@@ -490,8 +490,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);b
 <div class="modal" onclick="event.stopPropagation()" style="max-width:760px">
   <div class="modal-title">📥 นำเข้าแคมเปญ Marketing</div>
   <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px">
-    ไฟล์ <strong>.xlsx / .csv</strong> รูปแบบ 1 แถว = 1 แคมเปญ (มีหัวคอลัมน์ Campaign, Spend, KPI, ผลต่างๆ).<br>
-    ยังไม่มีไฟล์? <a href="marketing-template.xlsx" download style="color:var(--green);font-weight:600">⬇ ดาวน์โหลด template</a> (เปิดใน Excel หรือ copy ไป Google Sheet) — ดูแท็บ "คำอธิบาย" ในไฟล์ประกอบ
+    รองรับไฟล์ <strong>.xlsx / .csv</strong> 2 รูปแบบ:<br>
+    • <strong>1 แท็บ = 1 แคมเปญ</strong> (แยกค่าใช้จ่ายเป็นรายการย่อยได้) — <a href="marketing-template-bycampaign.xlsx" download style="color:var(--green);font-weight:600">⬇ template แบบแท็บต่อแคมเปญ</a><br>
+    • <strong>ตารางรวม 1 แถว = 1 แคมเปญ</strong> — <a href="marketing-template.xlsx" download style="color:var(--green);font-weight:600">⬇ template แบบตาราง</a><br>
+    เปิดใน Excel หรือ copy ไป Google Sheet ก็ได้ (ดูแท็บ "คำอธิบาย" ในไฟล์)
   </div>
   <input type="file" id="mp-import-file" accept=".xlsx,.xls,.csv" onchange="handleMpImportFile(event)" style="margin-bottom:12px">
   <div id="mp-import-status" style="font-size:13px;margin-bottom:10px"></div>
@@ -1796,8 +1798,52 @@ function handleMpImportFile(ev){
   if(typeof XLSX==='undefined'){ st.textContent='❌ โหลดไลบรารีอ่าน Excel ไม่สำเร็จ'; return; }
   st.textContent='⏳ กำลังอ่านไฟล์...';
   const reader=new FileReader();
-  reader.onload=e=>{ try{ const wb=XLSX.read(e.target.result,{type:'array',cellDates:true}); const ws=wb.Sheets[wb.SheetNames[0]]; const grid=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}); mpImportRows=parseMpSheet(grid); renderMpImportPreview(); }catch(err){ st.textContent='❌ '+err.message; } };
+  reader.onload=e=>{ try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      let rows=[];
+      wb.SheetNames.forEach(sn=>{
+        if(/คำอธิบาย|help|instruction|คู่มือ|guide|readme/i.test(sn)) return;
+        const grid=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
+        if(sheetIsTable(grid)) rows=rows.concat(parseMpSheet(grid));      // ตารางรวม (หลายแคมเปญในชีตเดียว)
+        else { const c=parseMpSheetPerCampaign(grid,sn); if(c) rows.push(c); } // 1 แท็บ = 1 แคมเปญ
+      });
+      mpImportRows=rows; renderMpImportPreview();
+    }catch(err){ st.textContent='❌ '+err.message; } };
   reader.readAsArrayBuffer(file);
+}
+function sheetIsTable(grid){
+  for(const row of (grid||[]).slice(0,6)){ const fields=(row||[]).map(mpHeaderField).filter(Boolean); if(fields.includes('campaign')&&fields.length>=3) return true; }
+  return false;
+}
+function parseMpSheetPerCampaign(grid,sheetName){
+  if(!grid||!grid.length) return null;
+  const meta={}; let expIdx=-1, expCols=null;
+  for(let r=0;r<grid.length;r++){
+    const row=grid[r]||[]; const lc=row.map(c=>(c==null?'':String(c).toLowerCase()));
+    if(expIdx<0 && lc.some(c=>c.includes('date')||c.includes('วันที่')) && lc.some(c=>c.includes('amount')||c.includes('จำนวน'))){
+      expIdx=r; expCols=row.map(c=>{ const s=(c==null?'':String(c).toLowerCase());
+        if(s.includes('date')||s.includes('วันที่'))return 'date';
+        if(s.includes('amount')||s.includes('จำนวน'))return 'amount';
+        if(s.includes('vendor')||s.includes('ร้าน')||s.includes('แพลตฟอร์ม'))return 'vendor';
+        if(s.includes('branch')||s.includes('สาขา'))return 'branch';
+        if(s.includes('desc')||s.includes('รายละเอียด')||s.includes('รายการ'))return 'desc';
+        return null; });
+      continue;
+    }
+    if(expIdx<0){ const f=mpHeaderField(row[0]); if(f && f!=='spend'){ let v=null; for(let i=1;i<row.length;i++){ if(row[i]!=null&&String(row[i]).trim()!==''){ v=row[i]; break; } } if(v!=null) meta[f]=v; } }
+  }
+  const campaign=impTxt(meta.campaign)||impTxt(sheetName); if(!campaign) return null;
+  const expenses=[];
+  if(expIdx>=0){ for(let r=expIdx+1;r<grid.length;r++){ const row=grid[r]||[]; const o={}; expCols.forEach((f,i)=>{ if(f)o[f]=row[i]; }); const amt=impNum(o.amount); if(amt<=0) continue; expenses.push({date:impDate(o.date),desc:impTxt(o.desc),vendor:impTxt(o.vendor),branch:impTxt(o.branch).includes('2')?'b2':'b1',amount:amt}); } }
+  const N=k=>impNum(meta[k]);
+  let kpis=parseKpiList(meta.kpi);
+  if(!kpis.length){ if(N('newCust')||N('targetCust'))kpis.push('acquisition'); if(N('redeemCount')||N('redeemBase'))kpis.push('redemption'); if(N('triers')||N('buyers'))kpis.push('trial'); if(N('newFollowers'))kpis.push('influencer'); if(N('reach')||N('impressions'))kpis.push('awareness'); if(N('engagement')||N('clicks'))kpis.push('engagement'); if(N('leads'))kpis.push('leads'); if(N('sales')&&!kpis.includes('influencer'))kpis.push('sales'); kpis=[...new Set(kpis)]; }
+  const spend=expenses.length?expenses.reduce((s,e)=>s+e.amount,0):N('spend');
+  return { campaign, objective:impTxt(meta.objective), startDate:impDate(meta.startDate), endDate:impDate(meta.endDate),
+    spend, branch:expenses[0]?expenses[0].branch:(impTxt(meta.branch).includes('2')?'b2':'b1'), vendor:impTxt(meta.vendor), kpis, expenses,
+    newCust:N('newCust'),potential:N('potential'),targetCust:N('targetCust'),redeemBase:N('redeemBase'),redeemCount:N('redeemCount'),
+    triers:N('triers'),samples:N('samples'),leads:N('leads'),buyers:N('buyers'),newFollowers:N('newFollowers'),
+    reach:N('reach'),impressions:N('impressions'),engagement:N('engagement'),clicks:N('clicks'),sales:N('sales'),note:impTxt(meta.note) };
 }
 function parseMpSheet(grid){
   if(!grid.length) return [];
@@ -1831,8 +1877,11 @@ function confirmMpImport(){
   if(!confirm('นำเข้า '+mpImportRows.length+' แคมเปญ? (สร้างค่าใช้จ่าย + บันทึกผล KPI)')) return;
   const btn=document.getElementById('mp-import-confirm'); btn.disabled=true; btn.textContent='กำลังนำเข้า...';
   const entryUpd={}; const proms=[];
+  const today=new Date().toISOString().slice(0,10);
   mpImportRows.forEach(o=>{
-    if(o.spend>0){ const id=uid()+Math.random().toString(36).slice(2,5); entryUpd[id]={type:'cost',group:'marketing',cat:'',campaign:o.campaign,amount:o.spend,date:o.startDate||new Date().toISOString().slice(0,10),branch:o.branch,vendor:o.vendor,account:'',desc:'นำเข้าจากชีต Marketing',note:'',createdBy:currentUser,source:'mp-import'}; }
+    if(o.expenses && o.expenses.length){
+      o.expenses.forEach(ex=>{ const id=uid()+Math.random().toString(36).slice(2,5); entryUpd[id]={type:'cost',group:'marketing',cat:'',campaign:o.campaign,amount:ex.amount,date:ex.date||o.startDate||today,branch:ex.branch||o.branch,vendor:ex.vendor||o.vendor,account:'',desc:ex.desc||'นำเข้าจากชีต Marketing',note:'',createdBy:currentUser,source:'mp-import'}; });
+    } else if(o.spend>0){ const id=uid()+Math.random().toString(36).slice(2,5); entryUpd[id]={type:'cost',group:'marketing',cat:'',campaign:o.campaign,amount:o.spend,date:o.startDate||today,branch:o.branch,vendor:o.vendor,account:'',desc:'นำเข้าจากชีต Marketing',note:'',createdBy:currentUser,source:'mp-import'}; }
     const res={name:o.campaign,objective:o.objective,startDate:o.startDate||'',endDate:o.endDate||'',kpis:o.kpis,kpi:o.kpis[0]||'',note:o.note,deleted:false,updatedBy:currentUser};
     ['newCust','potential','targetCust','redeemBase','redeemCount','triers','samples','leads','buyers','newFollowers','reach','impressions','engagement','clicks','sales'].forEach(k=>{ res[k]=num0(o[k]); });
     proms.push(resultsRef.child(resKey(o.campaign)).update(res));
